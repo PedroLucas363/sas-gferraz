@@ -1,0 +1,9 @@
+pnpm-lock.yaml
+node_modules
+.next
+dist
+.data
+playwright-report
+test-results
+
+apps/api/generated

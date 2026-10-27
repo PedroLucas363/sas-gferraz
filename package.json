@@ -1,0 +1,29 @@
+{
+  "name": "gferraz-makeup",
+  "private": true,
+  "packageManager": "pnpm@10.34.8",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @gferraz/shared build && node --env-file-if-exists=.env node_modules/concurrently/dist/bin/concurrently.js -k -n api,web \"pnpm --filter @gferraz/api dev\" \"pnpm --filter @gferraz/web dev\"",
+    "build": "pnpm --filter @gferraz/shared build && pnpm --filter @gferraz/api build && pnpm --filter @gferraz/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "tsx --tsconfig apps/api/tsconfig.json --test tests/*.test.ts",
+    "test:e2e": "playwright test",
+    "db:generate": "pnpm --filter @gferraz/api exec prisma generate",
+    "db:migrate": "pnpm --filter @gferraz/api exec tsx src/migrate.ts",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "tsx": "^4.20.0",
+    "concurrently": "^9.2.0",
+    "@types/node": "^24.0.0",
+    "@playwright/test": "^1.56.0",
+    "eslint": "10.13.0",
+    "typescript-eslint": "^8.46.0",
+    "prettier": "^3.6.0"
+  }
+}

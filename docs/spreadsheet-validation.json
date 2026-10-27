@@ -1,0 +1,120 @@
+{
+  "sheets": [
+    {
+      "kind": "appointment",
+      "name": "Clientes_2025",
+      "rows": 144,
+      "header": 3
+    },
+    {
+      "kind": "appointment",
+      "name": "Clientes_2026",
+      "rows": 138,
+      "header": 3
+    },
+    {
+      "kind": "expense",
+      "name": "ABRIL 2025",
+      "rows": 36,
+      "header": 3
+    },
+    {
+      "kind": "expense",
+      "name": "MAIO 2025",
+      "rows": 39,
+      "header": 3
+    },
+    {
+      "kind": "expense",
+      "name": "JUNHO 2025",
+      "rows": 42,
+      "header": 3
+    },
+    {
+      "kind": "expense",
+      "name": "JULHO 2025",
+      "rows": 38,
+      "header": 3
+    },
+    {
+      "kind": "expense",
+      "name": "AGOSTO 2025",
+      "rows": 40,
+      "header": 3
+    },
+    {
+      "kind": "expense",
+      "name": "SETEMBRO 2025",
+      "rows": 50,
+      "header": 3
+    },
+    {
+      "kind": "expense",
+      "name": "OUTUBRO 2025",
+      "rows": 31,
+      "header": 3
+    },
+    {
+      "kind": "expense",
+      "name": "NOVEMBRO 2025",
+      "rows": 50,
+      "header": 3
+    },
+    {
+      "kind": "expense",
+      "name": "DEZEMBRO 2025",
+      "rows": 50,
+      "header": 3
+    },
+    {
+      "kind": "payment",
+      "name": "ABRIL 2026",
+      "rows": 10,
+      "header": 2
+    },
+    {
+      "kind": "payment",
+      "name": "JUNHO 2026",
+      "rows": 20,
+      "header": 2
+    },
+    {
+      "kind": "payment",
+      "name": "JULHO 2026",
+      "rows": 44,
+      "header": 2
+    },
+    {
+      "kind": "payment",
+      "name": "AGOSTO 2026",
+      "rows": 38,
+      "header": 2
+    },
+    {
+      "kind": "payment",
+      "name": "SETEMBRO 2026",
+      "rows": 34,
+      "header": 2
+    },
+    {
+      "kind": "review",
+      "name": "Página1",
+      "rows": 13,
+      "header": 0
+    },
+    {
+      "kind": "review",
+      "name": "CARRO",
+      "rows": 18,
+      "header": 0
+    }
+  ],
+  "total": 829,
+  "byKind": {
+    "review": 144,
+    "expense": 297,
+    "payment": 112,
+    "appointment": 276
+  },
+  "warning": "Prévia isolada: não importada para a empresa da usuária. Somas de linhas reconhecidas, ainda sem conciliação."
+}

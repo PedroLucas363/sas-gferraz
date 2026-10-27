@@ -1,0 +1,48 @@
+name: Quality
+on: [push, pull_request]
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: gferraz
+          POSTGRES_PASSWORD: gferraz_ci_only
+          POSTGRES_DB: gferraz
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gferraz -d gferraz"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://gferraz:gferraz_ci_only@127.0.0.1:5432/gferraz
+      WEB_ORIGIN: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.8
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate && pnpm db:migrate
+      - run: pnpm --filter @gferraz/shared build
+      - run: pnpm typecheck && pnpm lint && pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Start application and exercise workflow
+        run: |
+          pnpm dev > /tmp/gferraz-dev.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3000/api/health; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:3000/api/health
+          pnpm test
+          pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-results
+          path: test-results/

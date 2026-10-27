@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+  engineType = "client"
+  output = "../generated/client"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model Organization {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  settings Json @default("{}")
+  createdAt DateTime @default(now())
+}
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  email String @unique
+  passwordHash String
+  role String @default("owner")
+  createdAt DateTime @default(now())
+  @@unique([organizationId,id])
+}
+model Session {
+  id String @id
+  userId String @db.Uuid
+  expiresAt DateTime
+  @@index([userId])
+}
+model Client {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  phone String @default("")
+  email String @default("")
+  birthday DateTime? @db.Date
+  address String @default("")
+  notes String @default("")
+  preferences String @default("")
+  consentPhotos Boolean @default(false)
+  customFields Json @default("{}")
+  archivedAt DateTime?
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  appointments Appointment[]
+  payments Payment[]
+  media Media[]
+  @@unique([organizationId,id])
+  @@index([organizationId,name])
+}
+model Service {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  category String
+  price Decimal @db.Decimal(14,2)
+  duration Int
+  description String @default("")
+  archivedAt DateTime?
+  version Int @default(1)
+  items AppointmentItem[]
+  @@unique([organizationId,id])
+  @@index([organizationId,category])
+}
+model Event {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  notes String @default("")
+  appointments Appointment[]
+  @@unique([organizationId,id])
+}
+model Appointment {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  clientId String @db.Uuid
+  client Client @relation(fields:[organizationId,clientId],references:[organizationId,id])
+  eventId String? @db.Uuid
+  event Event? @relation(fields:[organizationId,eventId],references:[organizationId,id])
+  title String
+  startsAt DateTime @db.Timestamptz(3)
+  duration Int
+  actualDuration Int?
+  address String @default("")
+  status String
+  discount Decimal @db.Decimal(14,2)
+  extra Decimal @db.Decimal(14,2)
+  travelFee Decimal @db.Decimal(14,2)
+  dueDate DateTime @db.Date
+  notes String @default("")
+  version Int @default(1)
+  items AppointmentItem[]
+  allocations Allocation[]
+  expenses Expense[]
+  media Media[]
+  trips Trip[]
+  @@unique([organizationId,id])
+  @@index([organizationId,startsAt])
+}
+model AppointmentItem {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  appointmentId String @db.Uuid
+  appointment Appointment @relation(fields:[organizationId,appointmentId],references:[organizationId,id])
+  serviceId String @db.Uuid
+  service Service @relation(fields:[organizationId,serviceId],references:[organizationId,id])
+  serviceName String
+  category String
+  quantity Int
+  unitPrice Decimal @db.Decimal(14,2)
+  @@index([organizationId,appointmentId])
+}
+model Payment {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  clientId String @db.Uuid
+  client Client @relation(fields:[organizationId,clientId],references:[organizationId,id])
+  receivedAt DateTime @db.Date
+  method String
+  amount Decimal @db.Decimal(14,2)
+  fee Decimal @db.Decimal(14,2)
+  notes String @default("")
+  voidedAt DateTime?
+  voidReason String?
+  version Int @default(1)
+  allocations Allocation[]
+  refunds Refund[]
+  @@unique([organizationId,id])
+  @@index([organizationId,receivedAt])
+}
+model Allocation {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  paymentId String @db.Uuid
+  payment Payment @relation(fields:[organizationId,paymentId],references:[organizationId,id])
+  appointmentId String @db.Uuid
+  appointment Appointment @relation(fields:[organizationId,appointmentId],references:[organizationId,id])
+  amount Decimal @db.Decimal(14,2)
+  refunds Refund[]
+  @@unique([organizationId,id])
+  @@unique([paymentId,appointmentId])
+}
+model Refund {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  paymentId String @db.Uuid
+  payment Payment @relation(fields:[organizationId,paymentId],references:[organizationId,id])
+  allocationId String @db.Uuid
+  allocation Allocation @relation(fields:[organizationId,allocationId],references:[organizationId,id])
+  amount Decimal @db.Decimal(14,2)
+  refundedOn DateTime @db.Date
+  reason String
+  @@index([organizationId,refundedOn])
+}
+model Expense {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  appointmentId String? @db.Uuid
+  appointment Appointment? @relation(fields:[organizationId,appointmentId],references:[organizationId,id])
+  description String
+  category String
+  amount Decimal @db.Decimal(14,2)
+  incurredOn DateTime @db.Date
+  dueDate DateTime @db.Date
+  paidOn DateTime? @db.Date
+  kind String
+  notes String @default("")
+  voidedAt DateTime?
+  voidReason String?
+  version Int @default(1)
+  @@unique([organizationId,id])
+  @@index([organizationId,incurredOn])
+}
+model Vehicle {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  year Int
+  fuel String
+  kmPerLiter Decimal @db.Decimal(10,3)
+  fuelPrice Decimal @db.Decimal(14,2)
+  annualKm Int
+  insurance Decimal @db.Decimal(14,2)
+  maintenance Decimal @db.Decimal(14,2)
+  tires Decimal @db.Decimal(14,2)
+  oil Decimal @db.Decimal(14,2)
+  tax Decimal @db.Decimal(14,2)
+  depreciation Decimal @db.Decimal(14,2)
+  other Decimal @db.Decimal(14,2)
+  archivedAt DateTime?
+  version Int @default(1)
+  trips Trip[]
+  @@unique([organizationId,id])
+}
+model Trip {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  appointmentId String @db.Uuid
+  appointment Appointment @relation(fields:[organizationId,appointmentId],references:[organizationId,id])
+  vehicleId String @db.Uuid
+  vehicle Vehicle @relation(fields:[organizationId,vehicleId],references:[organizationId,id])
+  distanceKm Decimal @db.Decimal(10,2)
+  minutes Int
+  parking Decimal @db.Decimal(14,2)
+  toll Decimal @db.Decimal(14,2)
+  estimatedCost Decimal @db.Decimal(14,2)
+  source String @default("manual")
+  @@index([organizationId,appointmentId])
+}
+model Media {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  clientId String @db.Uuid
+  client Client @relation(fields:[organizationId,clientId],references:[organizationId,id])
+  appointmentId String? @db.Uuid
+  appointment Appointment? @relation(fields:[organizationId,appointmentId],references:[organizationId,id])
+  relativePath String
+  thumbnailPath String
+  originalName String
+  checksum String
+  createdAt DateTime @default(now())
+  @@unique([organizationId,id])
+  @@index([organizationId,clientId])
+}
+model SavedView {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  name String
+  entity String
+  query Json
+  version Int @default(1)
+  @@index([organizationId,entity])
+}
+model Audit {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  userId String @db.Uuid
+  entity String
+  recordId String
+  action String
+  before Json?
+  after Json?
+  createdAt DateTime @default(now())
+  @@index([organizationId,createdAt])
+}
+model ImportBatch {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  fileName String
+  sourcePath String?
+  checksum String
+  rows Json
+  report Json @default("{}")
+  createdAt DateTime @default(now())
+  @@unique([organizationId,checksum])
+}
+model ImportReceipt {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  batchId String @db.Uuid
+  sourceKey String
+  fingerprint String
+  entity String
+  recordId String
+  @@unique([organizationId,sourceKey])
+  @@unique([organizationId,fingerprint])
+}
