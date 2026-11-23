@@ -5,7 +5,13 @@ import { querySchema, Query } from "@gferraz/shared";
 import { api, allRows, today, day, brl } from "./api";
 import { DataTable } from "./data-table";
 import { Button } from "./ui/button";
-export function Agenda({ onOpen }: { onOpen: (id: string) => void }) {
+export function Agenda({
+  onOpen,
+  onRoute,
+}: {
+  onOpen: (id: string) => void;
+  onRoute: (date: string) => void;
+}) {
   const cache = useQueryClient();
   const [date, setDate] = useState(today());
   const [view, setView] = useState("day");
@@ -28,9 +34,12 @@ export function Agenda({ onOpen }: { onOpen: (id: string) => void }) {
   }
   const to = view === "day" ? date : end.toISOString().slice(0, 10);
   const route = useQuery({
-    queryKey: ["route", date],
-    queryFn: () => api(`agenda/route?day=${date}`),
+    queryKey: ["day-route", date],
+    queryFn: () => api(`agenda/day?date=${date}`),
   });
+  const appointments: any[] = (route.data?.stops || []).flatMap(
+    (s: any) => s.appointments,
+  );
   const vehicles = useQuery({
     queryKey: ["vehicles-lookup"],
     queryFn: () => allRows("vehicles"),
@@ -73,62 +82,17 @@ export function Agenda({ onOpen }: { onOpen: (id: string) => void }) {
         onQuery={setCustomQuery}
         onOpen={onOpen}
       />
-      <section className="panel inset">
-        <p className="eyebrow">ROTEIRO DO DIA</p>
-        <h2>{day(date)}</h2>
-        <p>
-          Origem:{" "}
-          {route.data?.origin ||
-            "Configure seu endereço de partida em Configurações."}
-        </p>
-        <p className="muted">
-          {route.data?.notice} Margem de segurança:{" "}
-          {route.data?.bufferMinutes || 15} min.
-        </p>
-        {route.error && <p className="error">{route.error.message}</p>}
-        {!route.data?.rows.length && (
-          <p className="empty">Nenhum atendimento confirmado neste dia.</p>
-        )}
-        {route.data?.rows.map((a: any, i: number) => (
-          <article className="route-stop" key={a.id}>
-            <div className="stop-number">{i + 1}</div>
-            <div>
-              <button className="text-link" onClick={() => onOpen(a.id)}>
-                <h3>
-                  {a.clientName} ·{" "}
-                  {new Date(a.startsAt).toLocaleTimeString("pt-BR", {
-                    timeZone: "America/Sao_Paulo",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </h3>
-              </button>
-              <p>
-                {a.title} · {a.address || "Endereço ausente"}
-              </p>
-              <p>
-                {a.minutes === null
-                  ? "Deslocamento indisponível — informe uma estimativa manual."
-                  : `${a.minutes} min · ${a.distanceKm} km · saída recomendada ${new Date(a.departure).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}`}
-              </p>
-              {a.conflict && (
-                <p className="error">
-                  Conflito de horários ou risco de atraso em relação ao
-                  atendimento anterior.
-                </p>
-              )}
-              {a.address && (
-                <a
-                  target="_blank"
-                  rel="noreferrer"
-                  href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(i ? route.data.rows[i - 1].address : route.data.origin)}&destination=${encodeURIComponent(a.address)}`}
-                >
-                  Abrir trajeto no aplicativo de mapas ↗
-                </a>
-              )}
-            </div>
-          </article>
-        ))}
+      <section className="panel inset route-teaser">
+        <div>
+          <p className="eyebrow">ROTA DO DIA</p>
+          <h2>{day(date)}</h2>
+          <p className="muted">
+            {appointments.length
+              ? `${appointments.length} ${appointments.length === 1 ? "atendimento" : "atendimentos"} na rota deste dia.`
+              : "Nenhum atendimento na rota deste dia."}
+          </p>
+        </div>
+        <Button onClick={() => onRoute(date)}>Ver rota deste dia</Button>
       </section>
       <form
         className="panel inset"
@@ -149,7 +113,7 @@ export function Agenda({ onOpen }: { onOpen: (id: string) => void }) {
           }
         }}
       >
-        <h3>Registrar trecho e estimativa manual</h3>
+        <h3>Registrar trecho realizado (custo do veículo)</h3>
         <p className="muted">
           Distância total do trecho informado, sem duplicar ida e volta. O tempo
           corresponde ao deslocamento até o atendimento selecionado.
@@ -165,7 +129,7 @@ export function Agenda({ onOpen }: { onOpen: (id: string) => void }) {
               }
             >
               <option value="">Selecione</option>
-              {route.data?.rows.map((a: any) => (
+              {appointments.map((a: any) => (
                 <option key={a.id} value={a.id}>
                   {a.clientName} · {a.title}
                 </option>

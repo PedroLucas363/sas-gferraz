@@ -4,6 +4,7 @@ import {
   Post,
   Patch,
   Delete,
+  Put,
   Body,
   Param,
   Query as Q,
@@ -33,6 +34,8 @@ import {
   paymentSchema,
   expenseSchema,
   vehicleSchema,
+  addressDataSchema,
+  defaultSettings,
 } from "@gferraz/shared";
 import { db, Context, owned, atomic, expectVersion, audit, plain } from "./db";
 import { DataService } from "./data.service";
@@ -40,8 +43,9 @@ import { BusinessService } from "./business.service";
 import { AuthService } from "./auth";
 import { MediaService } from "./storage";
 import { ImportService } from "./import.service";
-import { localDate } from "./finance";
 import { selectRows } from "./query";
+import { RouteService } from "./route.service";
+import { lookupCep } from "./cep";
 type AuthReq = Request & { user: Context };
 const entity = (s: string) => z.enum(entities).parse(s);
 const parseQuery = (v?: string) => querySchema.parse(v ? JSON.parse(v) : {});
@@ -58,6 +62,7 @@ export class AppController {
     @Inject(AuthService) private auth: AuthService,
     @Inject(MediaService) private media: MediaService,
     @Inject(ImportService) private imports: ImportService,
+    @Inject(RouteService) private routes: RouteService,
   ) {}
   @Get("health") async health() {
     await db.$queryRaw`SELECT 1`;
@@ -88,12 +93,25 @@ export class AppController {
   ) {
     this.auth.limit(req.ip || "unknown");
     const v = credentials.parse(body);
-    return this.auth.session(await this.auth.login(v.email, v.password), res);
+    const user = await this.auth.login(v.email, v.password);
+    await audit(
+      db,
+      { organizationId: user.organizationId, userId: user.id, role: user.role },
+      "access",
+      user.id,
+      "login",
+      null,
+      { email: user.email },
+    );
+    return this.auth.session(user, res);
   }
-  @Post("auth/logout") logout(
-    @Req() req: Request,
+  @Post("auth/logout") async logout(
+    @Req() req: AuthReq,
     @Res({ passthrough: true }) res: Response,
   ) {
+    await audit(db, req.user, "access", req.user.userId, "logout", null, {
+      email: (req.user as any).email,
+    });
     return this.auth.logout(req, res);
   }
   @Get("auth/me") async me(@Req() req: AuthReq) {
@@ -213,12 +231,16 @@ export class AppController {
         query: querySchema,
       })
       .parse(body);
-    return db.savedView.create({
-      data: {
-        ...v,
-        query: plain(v.query),
-        organizationId: req.user.organizationId,
-      },
+    return atomic(async (tx) => {
+      const r = await tx.savedView.create({
+        data: {
+          ...v,
+          query: plain(v.query),
+          organizationId: req.user.organizationId,
+        },
+      });
+      await audit(tx, req.user, "views", r.id, "create", null, r);
+      return r;
     });
   }
   @Patch("views/:id") async editView(
@@ -236,7 +258,7 @@ export class AppController {
     return atomic(async (tx) => {
       const r = await owned(tx, "savedView", req.user, id);
       expectVersion(r, v.version);
-      return tx.savedView.update({
+      const after = await tx.savedView.update({
         where: { id },
         data: {
           name: v.name,
@@ -244,14 +266,20 @@ export class AppController {
           version: { increment: 1 },
         },
       });
+      await audit(tx, req.user, "views", id, "update", r, after);
+      return after;
     });
   }
   @Delete("views/:id") async removeView(
     @Req() req: AuthReq,
     @Param("id", ParseUUIDPipe) id: string,
   ) {
-    await owned(db, "savedView", req.user, id);
-    return db.savedView.delete({ where: { id } });
+    return atomic(async (tx) => {
+      const before = await owned(tx, "savedView", req.user, id);
+      const r = await tx.savedView.delete({ where: { id } });
+      await audit(tx, req.user, "views", id, "delete", before, null);
+      return r;
+    });
   }
   @Get("export/:entity") async export(
     @Req() req: AuthReq,
@@ -266,6 +294,11 @@ export class AppController {
     const fields = (
       query.columnOrder.length ? query.columnOrder : entityFields[en]
     ).filter((k) => entityFields[en].includes(k) && query.columns[k] !== false);
+    await audit(db, req.user, "exports", en, "export", null, {
+      entity: en,
+      format: format === "xlsx" ? "xlsx" : "csv",
+      rows: rows.length,
+    });
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Registros");
     sheet.addRow(fields.map((k) => fieldLabels[k] || k));
@@ -323,54 +356,37 @@ export class AppController {
         .parse(body),
     );
   }
-  @Get("agenda/route") async route(@Req() req: AuthReq, @Q("day") day: string) {
-    date.parse(day);
-    const org = await db.organization.findUniqueOrThrow({
-      where: { id: req.user.organizationId },
-    });
-    const settings = org.settings as any;
-    const buffer = Number(settings.bufferMinutes ?? 15);
-    const appointments = await db.appointment.findMany({
-      where: {
-        organizationId: req.user.organizationId,
-        status: { in: ["confirmed", "in_progress"] },
-      },
-      include: { client: true, trips: true },
-      orderBy: { startsAt: "asc" },
-    });
-    let previousEnd: Date | null = null;
-    const rows = appointments
-      .filter((a) => localDate(a.startsAt) === day)
-      .map((a) => {
-        const trip = a.trips.at(-1);
-        const departure = trip
-          ? new Date(a.startsAt.getTime() - (trip.minutes + buffer) * 60000)
-          : null;
-        const conflict = previousEnd
-          ? previousEnd > a.startsAt || (!!departure && previousEnd > departure)
-          : false;
-        previousEnd = new Date(a.startsAt.getTime() + a.duration * 60000);
-        return {
-          id: a.id,
-          clientName: a.client.name,
-          title: a.title,
-          startsAt: a.startsAt,
-          end: previousEnd,
-          address: a.address,
-          departure,
-          minutes: trip?.minutes ?? null,
-          distanceKm: trip?.distanceKm?.toString() ?? null,
-          source: trip ? "manual" : "unavailable",
-          conflict,
-        };
-      });
-    return {
-      origin: settings.originAddress || "",
-      bufferMinutes: buffer,
-      rows,
-      notice:
-        "Tempos manuais por trecho de entrada no atendimento. Rotas automáticas ainda não configuradas; não há estimativas fictícias.",
-    };
+  @Get("agenda/day")
+  @ApiOperation({
+    summary:
+      "Rota do dia: paradas em ordem de horário, trechos, alertas e links do Google Maps. Sem data, abre o próximo dia com atendimento.",
+  })
+  day(@Req() req: AuthReq, @Q("date") day?: string) {
+    return this.routes.day(req.user, day ? date.parse(day) : undefined);
+  }
+  @Put("agenda/legs")
+  @ApiOperation({
+    summary: "Estimativa informada de tempo e distância entre dois endereços",
+  })
+  leg(@Req() req: AuthReq, @Body() body: unknown) {
+    return this.routes.saveLeg(
+      req.user,
+      z
+        .object({
+          origin: z.string().trim().min(3).max(500),
+          destination: z.string().trim().min(3).max(500),
+          minutes: z.number().int().min(0).max(1440),
+          distanceKm: z
+            .string()
+            .regex(/^\d{1,5}(\.\d{1,2})?$/, "Informe a distância em km"),
+        })
+        .parse(body),
+    );
+  }
+  @Get("cep/:cep")
+  @ApiOperation({ summary: "Endereço a partir do CEP (ViaCEP / BrasilAPI)" })
+  cep(@Param("cep") cep: string) {
+    return lookupCep(cep);
   }
   @Get("settings") async settings(@Req() req: AuthReq) {
     return db.organization.findUniqueOrThrow({
@@ -388,6 +404,7 @@ export class AppController {
           beige: z.string().regex(/^#[a-fA-F0-9]{6}$/),
           green: z.string().regex(/^#[a-fA-F0-9]{6}$/),
           originAddress: z.string().max(500),
+          originAddressData: addressDataSchema.optional(),
           bufferMinutes: z.number().int().min(0).max(240),
           dashboardIndicators: z.array(z.string()).max(20).optional(),
         }),
@@ -404,16 +421,51 @@ export class AppController {
           settings: { ...(before.settings as any), ...v.settings },
         },
       });
-      await audit(tx, req.user, "settings", after.id, "update", before, after);
+      // Stored settings start empty; the audit shows the values that were in effect.
+      await audit(
+        tx,
+        req.user,
+        "settings",
+        after.id,
+        "update",
+        {
+          name: before.name,
+          settings: { ...defaultSettings, ...(before.settings as object) },
+        },
+        {
+          name: after.name,
+          settings: { ...defaultSettings, ...(after.settings as object) },
+        },
+      );
       return after;
     });
   }
-  @Get("audit") audit(@Req() req: AuthReq) {
-    return db.audit.findMany({
-      where: { organizationId: req.user.organizationId },
+  @Get("audit")
+  @ApiOperation({
+    summary:
+      "Histórico de alterações; filtros opcionais por tipo e por registro",
+  })
+  async audit(
+    @Req() req: AuthReq,
+    @Q("entity") e?: string,
+    @Q("recordId") recordId?: string,
+  ) {
+    const w = { organizationId: req.user.organizationId };
+    const rows = await db.audit.findMany({
+      where: {
+        ...w,
+        ...(e ? { entity: z.string().max(40).parse(e) } : {}),
+        ...(recordId ? { recordId: z.string().max(80).parse(recordId) } : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: 200,
     });
+    const users = new Map(
+      (
+        await db.user.findMany({ where: w, select: { id: true, name: true } })
+      ).map((u) => [u.id, u.name]),
+    );
+    return rows.map((r) => ({ ...r, userName: users.get(r.userId) ?? "—" }));
   }
   @Get("export-all") async exportAll(
     @Req() req: AuthReq,
@@ -436,6 +488,7 @@ export class AppController {
       "expense",
       "vehicle",
       "trip",
+      "routeLeg",
       "media",
       "savedView",
       "audit",
@@ -448,6 +501,10 @@ export class AppController {
             ? { id: req.user.organizationId }
             : { organizationId: req.user.organizationId },
       });
+    await audit(db, req.user, "exports", "all", "export", null, {
+      entity: "all",
+      format: "json",
+    });
     res.attachment("gferraz-dados.json").json(output);
   }
   @Post("media")

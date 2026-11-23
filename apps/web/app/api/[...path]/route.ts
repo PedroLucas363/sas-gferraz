@@ -15,6 +15,9 @@ async function proxy(
     const value = req.headers.get(k);
     if (value) headers.set(k, value);
   }
+  // The address the browser used; the API compares it with Origin for devices on the local network.
+  const host = req.headers.get("host");
+  if (host) headers.set("x-forwarded-host", host);
   try {
     const init: RequestInit & { duplex?: string } = {
       method: req.method,

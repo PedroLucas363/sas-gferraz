@@ -15,7 +15,9 @@ import {
 } from "node:crypto";
 import { promisify } from "node:util";
 import { Request, Response } from "express";
-import { db, atomic } from "./db";
+import { defaultSettings } from "@gferraz/shared";
+import { db, atomic, audit } from "./db";
+import { originAllowed } from "./origin";
 const scrypt = promisify(scryptCb);
 const hashToken = (s: string) => createHash("sha256").update(s).digest("hex");
 export async function passwordHash(password: string) {
@@ -52,9 +54,9 @@ export class AuthService {
     const hash = await passwordHash(input.password);
     return atomic(async (tx) => {
       const org = await tx.organization.create({
-        data: { name: input.company },
+        data: { name: input.company, settings: defaultSettings },
       });
-      return tx.user.create({
+      const user = await tx.user.create({
         data: {
           name: input.name,
           email: input.email.toLowerCase(),
@@ -62,6 +64,21 @@ export class AuthService {
           passwordHash: hash,
         },
       });
+      // Never audit the password hash.
+      await audit(
+        tx,
+        { organizationId: org.id, userId: user.id, role: user.role },
+        "settings",
+        org.id,
+        "create",
+        null,
+        {
+          name: org.name,
+          settings: defaultSettings,
+          owner: { name: user.name, email: user.email },
+        },
+      );
+      return user;
     });
   }
   async login(email: string, password: string) {
@@ -124,10 +141,18 @@ export class AccessGuard implements CanActivate {
     const req = ctx.switchToHttp().getRequest();
     if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) {
       const origin = req.headers.origin;
-      const allowed = (process.env.WEB_ORIGIN || "http://localhost:3000").split(
-        ",",
-      );
-      if (origin && !allowed.includes(origin))
+      const allowed = (process.env.WEB_ORIGIN || "http://localhost:3000")
+        .split(",")
+        .map((s) => s.trim());
+      if (
+        origin &&
+        !originAllowed(origin, {
+          allowed,
+          // Phones and tablets on the same network open the app by the computer's address.
+          lan: process.env.ALLOW_LAN_ORIGIN === "true",
+          forwardedHost: req.headers["x-forwarded-host"],
+        })
+      )
         throw new ForbiddenException("Origem não autorizada");
       if (req.cookies?.gf_session && !origin)
         throw new ForbiddenException(

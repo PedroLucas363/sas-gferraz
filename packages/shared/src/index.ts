@@ -32,12 +32,59 @@ export const statusLabels: Record<string, string> = {
   cancelled: "Cancelado",
   no_show: "Não compareceu",
 };
+export const addressDataSchema = z.object({
+  cep: z.string().max(9).default(""),
+  street: z.string().max(500).default(""),
+  number: z.string().max(20).default(""),
+  complement: z.string().max(100).default(""),
+  district: z.string().max(100).default(""),
+  city: z.string().max(100).default(""),
+  state: z.string().max(2).default(""),
+});
+export type AddressData = z.infer<typeof addressDataSchema>;
+export const emptyAddress: AddressData = {
+  cep: "",
+  street: "",
+  number: "",
+  complement: "",
+  district: "",
+  city: "",
+  state: "",
+};
+/** Single-line address used by lists, routes and map links. */
+export function formatAddress(a: Partial<AddressData>) {
+  const t = (v?: string) => (v || "").trim();
+  const line = [t(a.street), t(a.number)].filter(Boolean).join(", ");
+  const first = [line, t(a.complement)].filter(Boolean).join(" - ");
+  const cityState = [t(a.city), t(a.state)].filter(Boolean).join(" - ");
+  return [first, t(a.district), cityState, t(a.cep)].filter(Boolean).join(", ");
+}
+export const hasAddressData = (a?: Partial<AddressData> | null) =>
+  !!a && Object.values(a).some((v) => String(v || "").trim());
+/** Structured address for editing; a legacy free-text address becomes the street line. */
+export function addressDataOf(
+  data: Partial<AddressData> | null | undefined,
+  legacy: string | null | undefined,
+): AddressData {
+  return hasAddressData(data)
+    ? { ...emptyAddress, ...data }
+    : { ...emptyAddress, street: legacy || "" };
+}
+export const defaultSettings = {
+  beige: "#F9EAD2",
+  green: "#546B57",
+  originAddress: "",
+  originAddressData: emptyAddress,
+  bufferMinutes: 15,
+  dashboardIndicators: [] as string[],
+};
 export const clientSchema = z.object({
   name: z.string().trim().min(2).max(160),
   phone: z.string().max(40).default(""),
   email: z.union([z.email(), z.literal("")]).default(""),
   birthday: date.nullable().default(null),
   address: z.string().max(500).default(""),
+  addressData: addressDataSchema.prefault({}),
   notes: z.string().max(5000).default(""),
   preferences: z.string().max(2000).default(""),
   consentPhotos: z.boolean().default(false),
@@ -58,6 +105,7 @@ export const appointmentSchema = z.object({
   duration: z.number().int().min(5).max(1440),
   actualDuration: z.number().int().min(0).max(1440).nullable().default(null),
   address: z.string().max(500).default(""),
+  addressData: addressDataSchema.prefault({}),
   status,
   discount: money.default("0"),
   extra: money.default("0"),

@@ -28,6 +28,8 @@ services:
       MEDIA_ROOT: /app/media
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Accept phones and tablets on the same network (see COMO-TESTAR-NO-WINDOWS.md).
+      ALLOW_LAN_ORIGIN: ${ALLOW_LAN_ORIGIN:-true}
     volumes:
       - type: bind
         source: ${MEDIA_HOST_PATH:-./.data/GFerraz Makeup}
@@ -55,7 +57,8 @@ services:
     environment:
       API_INTERNAL_URL: http://api:3001
     ports:
-      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+      # Published to the local network. Set WEB_BIND=127.0.0.1 to serve this computer only.
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy

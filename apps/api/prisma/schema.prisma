@@ -37,6 +37,7 @@ model Client {
   email String @default("")
   birthday DateTime? @db.Date
   address String @default("")
+  addressData Json @default("{}")
   notes String @default("")
   preferences String @default("")
   consentPhotos Boolean @default(false)
@@ -84,6 +85,7 @@ model Appointment {
   duration Int
   actualDuration Int?
   address String @default("")
+  addressData Json @default("{}")
   status String
   discount Decimal @db.Decimal(14,2)
   extra Decimal @db.Decimal(14,2)
@@ -208,6 +210,19 @@ model Trip {
   estimatedCost Decimal @db.Decimal(14,2)
   source String @default("manual")
   @@index([organizationId,appointmentId])
+}
+model RouteLeg {
+  id String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  originKey String
+  destinationKey String
+  origin String
+  destination String
+  minutes Int
+  distanceKm Decimal @db.Decimal(10,2)
+  source String @default("manual")
+  updatedAt DateTime @default(now())
+  @@unique([organizationId,originKey,destinationKey])
 }
 model Media {
   id String @id @default(uuid()) @db.Uuid

@@ -30,7 +30,7 @@ test("cadastro, atendimento, pagamento parcial, indicador e visualização salva
     .getByLabel("Nome completo", { exact: true })
     .fill("Cliente Navegador");
   await page.getByLabel("Telefone / WhatsApp").fill("11999999999");
-  await page.getByLabel("Endereço", { exact: true }).fill("Avenida Teste, 10");
+  await page.getByLabel("Rua / avenida").fill("Avenida Teste, 10");
   await page
     .getByLabel("Consentimento para armazenar fotografias privadas")
     .check();

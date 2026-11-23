@@ -309,6 +309,10 @@ export class ImportService {
         report: plain(report),
       },
     });
+    await audit(db, c, "imports", batch.id, "create", null, {
+      fileName: batch.fileName,
+      rows: rows.length,
+    });
     return this.get(c, batch.id);
   }
   async get(c: Context, id: string) {

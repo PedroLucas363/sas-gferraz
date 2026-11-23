@@ -18,9 +18,21 @@ Cada indicador carrega entidade, medida, consulta original, sinal e subtotal de 
 
 Após qualquer mutação bem-sucedida, TanStack Query invalida as consultas ativas. Há atualização automática a cada 15 segundos e ao focar a janela para alterações de outra sessão. Não existe saldo armazenado separadamente que precise de correção manual.
 
+## Rota do dia, endereços e histórico
+
+`route.ts` contém somente funções puras: agrupa atendimentos consecutivos no mesmo endereço, calcula saída, chegada, folga, alertas e volta, e monta os links do Google Maps (um link até três paradas intermediárias, o limite dos navegadores de celular; acima disso, partes consecutivas). `route.service.ts` busca os atendimentos do dia pelo intervalo de `startsAt`, sem carregar a empresa inteira, e escolhe o próximo dia com atendimento em aberto. Entram as situações aguardando confirmação, confirmado, em andamento e concluído. Valores a receber continuam vindo de `finance.ts`.
+
+Tempo e distância vêm de `RouteLeg`, uma estimativa por par de endereços normalizados, informada pela usuária e auditada. Quando só existe o sentido inverso, ele é usado. Um trecho realizado (`Trip`) serve de reserva. Sem estimativa, a tela informa a falta e não inventa valores. Um provedor automático poderá preencher a mesma tabela com `source` diferente, sem mudar a tela.
+
+Endereços têm duas formas: `addressData` (CEP, rua, número, complemento, bairro, cidade, UF) para edição e `address`, a linha única usada por listas, rotas e links. O servidor deriva a linha de `addressData` em `business.service.ts`; endereços antigos em texto livre continuam válidos e aparecem no campo da rua. `cep.ts` consulta ViaCEP e BrasilAPI pelo servidor, com tempo limite, e envia apenas o CEP.
+
+A auditoria cobre todas as mutações e também acesso, exportações e prévia de importação. Alterações de configuração registram os valores em vigor antes e depois, mesmo quando a empresa ainda usava os padrões; atendimentos registram os serviços e recebimentos registram a distribuição. A senha nunca entra na auditoria. `GET /audit` aceita filtro por tipo e por registro e devolve o nome de quem fez.
+
 ## Integridade e segurança
 
 Sessões opacas de 256 bits: somente SHA-256 do token no banco, expiração em 7 dias, cookie HttpOnly/SameSite Strict. Senhas com scrypt e salt aleatório. Origem obrigatória para mutações autenticadas e comparação com `WEB_ORIGIN`; entradas validadas com Zod. Não há IDs de empresa aceitos em payloads. A empresa é derivada da sessão. Chaves estrangeiras compostas impedem relações entre empresas.
+
+Com `ALLOW_LAN_ORIGIN=true`, a API também aceita uma origem da rede local (IPv4 privado, `localhost`, `.local` ou nome sem pontos) desde que seja exatamente o endereço em que a página foi aberta. Esse endereço chega em `x-forwarded-host`, definido pelo proxy do Next, o único cliente que alcança a API: no Compose a API não publica porta e, em desenvolvimento, escuta em `127.0.0.1`. Um nome público que aponte para o computador é recusado, e o cookie `SameSite=Strict` continua preso ao endereço usado. A regra está em `origin.ts`. O tráfego na rede local é HTTP, sem criptografia; não exponha a porta à internet.
 
 Versão otimista evita sobrescrever cadastros antigos. Transações financeiras serializáveis rejeitam concorrência e excesso de pagamento/reembolso. O usuário recebe conflito para recarregar e tentar novamente; não há repetição cega de gravação. Arquivamentos e estornos mantêm histórico e motivo. Fotos exigem consentimento e autorização em toda leitura; originais e miniaturas não ficam em `public`.
 
