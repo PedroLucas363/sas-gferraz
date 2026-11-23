@@ -92,3 +92,11 @@ Executado no mesmo computador Windows 11, com o endereço de rede `192.168.15.14
 | TypeScript / ESLint / Prettier          | Aprovados                                                                                                                             |
 
 Não validado: abertura a partir de um celular de verdade. As requisições acima saíram do próprio computador, portanto não passaram pelo firewall do Windows. Nesta máquina a rede está marcada como Pública e existe regra de entrada liberada para o Docker Desktop nesse perfil; em outra instalação pode ser preciso marcar a rede como Privada. Os testes de navegador (e2e) continuam sem execução nesta etapa.
+
+## Correção de 23/11/2026: inicializador Windows
+
+Sintoma: `INICIAR-WINDOWS.cmd` parava em "A interface ainda nao respondeu", com os três contêineres no ar e a página abrindo no navegador.
+
+Causa: a espera consultava `http://localhost:3000` com tempo limite de 2 s. No Windows, `localhost` resolve primeiro para `::1`; nada escuta em `::1:3000`, e o Windows leva cerca de 2 s para desistir dessa conexão antes de tentar `127.0.0.1`. Todas as 60 tentativas esgotavam o tempo.
+
+Correção: a espera usa `http://127.0.0.1:3000` com tempo limite de 5 s. Verificado: a checagem passou em 0,3 s com o stack do Compose no ar; a consulta a `localhost` continuou esgotando em 2 s.
