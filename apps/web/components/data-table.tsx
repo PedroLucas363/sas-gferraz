@@ -13,6 +13,7 @@ import {
   entityFields,
   fieldLabels,
   statusLabels,
+  fieldValueLabels,
   querySchema,
 } from "@gferraz/shared";
 import { api, queryString, display } from "./api";
@@ -355,6 +356,25 @@ export function DataTable({
                       }}
                     />
                   ))
+                ) : fieldValueLabels[f.field] && ["eq", "ne"].includes(f.op) ? (
+                  <select
+                    aria-label="Valor do filtro"
+                    value={String(f.value ?? "")}
+                    onChange={(e) =>
+                      update({
+                        filters: query.filters.map((v, j) =>
+                          i === j ? { ...v, value: e.target.value } : v,
+                        ),
+                      })
+                    }
+                  >
+                    <option value="">Selecione</option>
+                    {Object.entries(fieldValueLabels[f.field]).map(([v, l]) => (
+                      <option key={v} value={v}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
                 ) : (
                   <input
                     aria-label="Valor do filtro"

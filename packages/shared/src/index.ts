@@ -32,6 +32,17 @@ export const statusLabels: Record<string, string> = {
   cancelled: "Cancelado",
   no_show: "Não compareceu",
 };
+export const kindLabels: Record<string, string> = {
+  fixed: "Fixa",
+  variable: "Variável",
+};
+/** Fields stored as codes but shown as words; filters and search accept either. */
+export const fieldValueLabels: Record<string, Record<string, string>> = {
+  status: statusLabels,
+  kind: kindLabels,
+};
+export const valueLabel = (field: string, v: unknown) =>
+  fieldValueLabels[field]?.[String(v)] ?? String(v ?? "");
 export const addressDataSchema = z.object({
   cep: z.string().max(9).default(""),
   street: z.string().max(500).default(""),

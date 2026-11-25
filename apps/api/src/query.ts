@@ -5,6 +5,8 @@ import {
   numericFields,
   Query,
   Row,
+  fieldValueLabels,
+  valueLabel,
 } from "@gferraz/shared";
 import { D } from "./db";
 const text = (v: unknown) =>
@@ -12,6 +14,43 @@ const text = (v: unknown) =>
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+function test(f: Query["filters"][number], r: Row) {
+  const v = r[f.field],
+    s = String(v ?? ""),
+    target = f.value;
+  if (f.op === "empty") return v === null || s === "";
+  if (f.op === "not_empty") return v !== null && s !== "";
+  if (f.op === "contains") return text(s).includes(text(target));
+  if (f.op === "between") {
+    if (!Array.isArray(target))
+      throw new BadRequestException("Informe dois limites");
+    if (numericFields.has(f.field)) {
+      try {
+        return D(s || 0).gte(target[0]) && D(s || 0).lte(target[1]);
+      } catch {
+        throw new BadRequestException("Informe limites numéricos válidos");
+      }
+    }
+    return s >= target[0] && s <= target[1];
+  }
+  if (Array.isArray(target)) throw new BadRequestException("Valor inválido");
+  let cmp: number;
+  try {
+    cmp =
+      numericFields.has(f.field) && s !== "" && target !== undefined
+        ? D(s).comparedTo(D(target))
+        : text(s).localeCompare(text(target));
+  } catch {
+    throw new BadRequestException("Informe um filtro numérico válido");
+  }
+  return f.op === "eq"
+    ? cmp === 0
+    : f.op === "ne"
+      ? cmp !== 0
+      : f.op === "gt"
+        ? cmp > 0
+        : cmp < 0;
+}
 export function selectRows(rows: Row[], q: Query, entity: Entity) {
   const allowed = new Set([
     ...entityFields[entity],
@@ -40,46 +79,22 @@ export function selectRows(rows: Row[], q: Query, entity: Entity) {
     if (q.to && periodDate && String(periodDate) > q.to) return false;
     if (
       q.search &&
-      !Object.values(r).some((v) => text(v).includes(text(q.search)))
+      !Object.entries(r).some(
+        ([k, v]) =>
+          text(v).includes(text(q.search)) ||
+          text(valueLabel(k, v)).includes(text(q.search)),
+      )
     )
       return false;
     const matches = q.filters.map((f) => {
-      const v = r[f.field],
-        s = String(v ?? ""),
-        target = f.value;
-      if (f.op === "empty") return v === null || s === "";
-      if (f.op === "not_empty") return v !== null && s !== "";
-      if (f.op === "contains") return text(s).includes(text(target));
-      if (f.op === "between") {
-        if (!Array.isArray(target))
-          throw new BadRequestException("Informe dois limites");
-        if (numericFields.has(f.field)) {
-          try {
-            return D(s || 0).gte(target[0]) && D(s || 0).lte(target[1]);
-          } catch {
-            throw new BadRequestException("Informe limites numéricos válidos");
-          }
-        }
-        return s >= target[0] && s <= target[1];
+      // A coded field (status, kind) matches by its code or by the word shown on screen.
+      if (fieldValueLabels[f.field] && !["empty", "not_empty"].includes(f.op)) {
+        const v = r[f.field];
+        const shown = { ...r, [f.field]: valueLabel(f.field, v) };
+        const both = [test(f, r), test(f, shown)];
+        return f.op === "ne" ? both.every(Boolean) : both.some(Boolean);
       }
-      if (Array.isArray(target))
-        throw new BadRequestException("Valor inválido");
-      let cmp: number;
-      try {
-        cmp =
-          numericFields.has(f.field) && s !== "" && target !== undefined
-            ? D(s).comparedTo(D(target))
-            : text(s).localeCompare(text(target));
-      } catch {
-        throw new BadRequestException("Informe um filtro numérico válido");
-      }
-      return f.op === "eq"
-        ? cmp === 0
-        : f.op === "ne"
-          ? cmp !== 0
-          : f.op === "gt"
-            ? cmp > 0
-            : cmp < 0;
+      return test(f, r);
     });
     return (
       matches.length === 0 ||

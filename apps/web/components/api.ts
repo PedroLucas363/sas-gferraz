@@ -1,4 +1,10 @@
-import { querySchema, Entity, Query, statusLabels } from "@gferraz/shared";
+import {
+  querySchema,
+  Entity,
+  Query,
+  fieldValueLabels,
+  valueLabel,
+} from "@gferraz/shared";
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -59,9 +65,7 @@ export const today = () =>
   }).format(new Date());
 export function display(field: string, v: unknown) {
   if (v === null || v === undefined || v === "") return "—";
-  if (field === "status") return statusLabels[String(v)] || String(v);
-  if (field === "kind")
-    return v === "fixed" ? "Fixa" : v === "variable" ? "Variável" : String(v);
+  if (fieldValueLabels[field]) return valueLabel(field, v);
   if (
     [
       "total",

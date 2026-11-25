@@ -89,6 +89,34 @@ test("consultas combinam período e E/OU e não aceitam campos arbitrários", ()
     ),
   );
 });
+test("situação e tipo filtram pelo código ou pela palavra mostrada na tela", () => {
+  const rows = [
+    { id: "1", date: "2026-10-01", status: "confirmed", clientName: "Ana" },
+    { id: "2", date: "2026-10-02", status: "completed", clientName: "Bia" },
+    { id: "3", date: "2026-10-03", status: "cancelled", clientName: "Cris" },
+  ];
+  const ids = (filters: unknown[], search?: string) =>
+    selectRows(
+      rows,
+      querySchema.parse({ filters, search }),
+      "appointments",
+    ).map((r) => r.id);
+  assert.deepEqual(ids([{ field: "status", op: "eq", value: "Confirmado" }]), [
+    "1",
+  ]);
+  assert.deepEqual(ids([{ field: "status", op: "eq", value: "confirmed" }]), [
+    "1",
+  ]);
+  assert.deepEqual(
+    ids([{ field: "status", op: "contains", value: "conclu" }]),
+    ["2"],
+  );
+  assert.deepEqual(ids([{ field: "status", op: "ne", value: "Cancelado" }]), [
+    "1",
+    "2",
+  ]);
+  assert.deepEqual(ids([], "cancelado"), ["3"]);
+});
 test("datas brasileiras inválidas e valores ausentes não viram registros fictícios", () => {
   assert.equal(parseDate("15/11/0202"), null);
   assert.equal(parseDate("31/02/2026"), null);
