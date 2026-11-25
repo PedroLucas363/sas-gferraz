@@ -784,6 +784,9 @@ td {
 .item-row label {
   flex: 1;
 }
+.item-row > .search-select {
+  flex: 2;
+}
 .item-row label:first-child {
   flex: 2;
 }
@@ -1932,6 +1935,8 @@ fieldset.address {
   top: 100%;
   left: 0;
   right: 0;
+  /* Narrow fields (a service row) still get a readable list. */
+  min-width: min(360px, calc(100vw - 48px));
   margin: 4px 0 0;
   padding: 4px;
   list-style: none;
@@ -1958,6 +1963,7 @@ fieldset.address {
 }
 .search-select-list li small {
   color: var(--muted);
+  white-space: nowrap;
 }
 
 /* Appointment form: travel, suggestions and the running total. */
@@ -2039,12 +2045,25 @@ button.link {
   display: grid;
   gap: 10px;
 }
+/* Same columns on every row; the range hint under the km field must not push the prices down. */
+.travel-table .item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: start;
+}
+.travel-table .item-row > button {
+  margin-top: 26px;
+}
 @media (max-width: 760px) {
   .travel-table .item-row {
-    flex-wrap: wrap;
+    grid-template-columns: 1fr 1fr;
   }
-  .travel-table .item-row label {
-    flex: 1 1 40%;
+  .travel-table .item-row > label:first-child {
+    grid-column: 1 / -1;
+  }
+  .travel-table .item-row > button {
+    margin-top: 0;
+    grid-column: 1 / -1;
   }
 }
 .travel-lines {
@@ -2053,4 +2072,10 @@ button.link {
 }
 .travel-lines p {
   margin: 0;
+}
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }

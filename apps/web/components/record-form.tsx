@@ -236,6 +236,14 @@ function Editor({
     );
   }
   const watch = form.watch();
+  // Appointments of the chosen client that can still receive money, newest first.
+  const clientAppointments = [...(lookups.data?.appointments || [])]
+    .filter(
+      (a) =>
+        a.clientId === watch.clientId &&
+        !["cancelled", "quote", "no_show"].includes(a.status),
+    )
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
   // Date and time are typed apart and joined into startsAt (São Paulo, UTC-3, no daylight saving).
   const [when, setWhen] = useState(() => {
     const local = record
@@ -698,44 +706,36 @@ function Editor({
           </details>
           <h3>Serviços contratados</h3>
           {items.fields.map((f, i) => {
-            const chosen = serviceOptions.find(
-              (s) => s.id === watch.items?.[i]?.serviceId,
-            );
             return (
               <div className="item-row" key={f.id}>
-                <label>
-                  Serviço
-                  <select
-                    aria-label="Serviço"
-                    {...form.register(`items.${i}.serviceId`)}
-                    onChange={(e) => {
-                      form.setValue(`items.${i}.serviceId`, e.target.value);
-                      const s = serviceOptions.find(
-                        (s) => s.id === e.target.value,
-                      );
-                      if (s) form.setValue(`items.${i}.unitPrice`, s.price);
-                    }}
-                  >
-                    <option value="">Selecione</option>
-                    {serviceOptions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                        {s.duration ? ` · ${toHhmm(s.duration)}` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  {chosen?.duration ? (
-                    <small>
-                      Duração de referência: {toHhmm(chosen.duration)}
-                    </small>
-                  ) : null}
-                </label>
+                <SearchSelect
+                  label="Serviço"
+                  options={serviceOptions.map((s) => ({
+                    id: s.id,
+                    name: s.name,
+                    hint: [
+                      s.price ? brl(s.price) : "",
+                      s.duration ? toHhmm(s.duration) : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                  }))}
+                  value={watch.items?.[i]?.serviceId || ""}
+                  onChange={(id) => {
+                    form.setValue(`items.${i}.serviceId`, id, {
+                      shouldValidate: true,
+                    });
+                    const s = serviceOptions.find((s) => s.id === id);
+                    if (s) form.setValue(`items.${i}.unitPrice`, s.price);
+                  }}
+                />
                 <label>
                   Quantidade
                   <input
                     type="number"
                     min="1"
                     onKeyDown={blockSigns}
+                    aria-label="Quantidade"
                     {...form.register(`items.${i}.quantity`, {
                       valueAsNumber: true,
                     })}
@@ -748,6 +748,7 @@ function Editor({
                       type="number"
                       step="0.01"
                       {...nonNegative}
+                      aria-label="Valor unitário"
                       {...form.register(`items.${i}.unitPrice`)}
                     />,
                   )}
@@ -885,29 +886,32 @@ function Editor({
           <h3>Distribuição entre atendimentos</h3>
           {allocations.fields.map((f, i) => (
             <div className="item-row" key={f.id}>
-              <label>
-                Atendimento
-                <select
-                  aria-label="Atendimento"
-                  {...form.register(`allocations.${i}.appointmentId`)}
-                >
-                  <option value="">Selecione</option>
-                  {[...(lookups.data?.appointments || [])]
-                    .sort((a, b) =>
-                      String(b.date).localeCompare(String(a.date)),
-                    )
-                    .filter(
-                      (a) =>
-                        a.clientId === watch.clientId &&
-                        !["cancelled", "quote", "no_show"].includes(a.status),
-                    )
-                    .map((a) => (
-                      <option value={a.id} key={a.id}>
-                        {a.title} · {a.date} · saldo {brl(a.pending)}
-                      </option>
-                    ))}
-                </select>
-              </label>
+              <SearchSelect
+                label="Atendimento"
+                placeholder={
+                  watch.clientId
+                    ? "Digite para buscar"
+                    : "Escolha a cliente primeiro"
+                }
+                options={clientAppointments.map((a) => ({
+                  id: a.id,
+                  name: `${a.title} · ${day(a.date)}`,
+                  hint: `saldo ${brl(a.pending)}`,
+                }))}
+                value={watch.allocations?.[i]?.appointmentId || ""}
+                onChange={(id) => {
+                  form.setValue(`allocations.${i}.appointmentId`, id, {
+                    shouldValidate: true,
+                  });
+                  // An empty amount starts at what is still owed on that appointment.
+                  const a = clientAppointments.find((a) => a.id === id);
+                  const current = Number(watch.allocations?.[i]?.amount || 0);
+                  if (a && !current && Number(a.pending) > 0)
+                    form.setValue(`allocations.${i}.amount`, a.pending, {
+                      shouldValidate: true,
+                    });
+                }}
+              />
               <label>
                 Valor recebido
                 {money(
@@ -915,6 +919,7 @@ function Editor({
                     type="number"
                     step="0.01"
                     {...nonNegative}
+                    aria-label="Valor recebido"
                     {...form.register(`allocations.${i}.amount`)}
                   />,
                 )}
