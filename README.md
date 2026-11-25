@@ -15,6 +15,18 @@ Sistema de gestão com clientes, catálogo, atendimentos, recebimentos parciais,
 
 A implementação inicial é funcional e incremental. Consulte [PROGRESS.md](PROGRESS.md), [ROADMAP.md](ROADMAP.md) e [docs/validation.md](docs/validation.md) para distinguir o que foi validado das funcionalidades ainda previstas. Não há dados fictícios inseridos na empresa de produção. O arquivo histórico original permanece intacto; não foi importado automaticamente.
 
+## Rota do dia, endereço por CEP e histórico
+
+- **Rota do dia** (`?module=route`, tela inicial no celular): abre no próximo dia com atendimento e mostra saída, paradas, trechos, alertas e volta para casa. Os botões abrem o Google Maps por link, sem chave e sem custo. Informe uma vez o tempo e a distância de cada trecho (“Informar tempo”); o par de endereços fica guardado.
+- **Endereço por CEP**: ao digitar o CEP, o servidor consulta o ViaCEP (BrasilAPI de reserva) e preenche rua, bairro, cidade e UF. Só os oito dígitos do CEP saem do servidor. Sem internet, o endereço pode ser digitado à mão.
+- **Histórico**: Configurações → Histórico de alterações, e a aba “Alterações” de cada cadastro.
+
+Cadastre o endereço de partida em Configurações para ter horário de saída e de volta.
+
+## Acesso pelo celular na rede local
+
+O Compose publica a interface na rede local (`WEB_BIND`, padrão `0.0.0.0`) e a API aceita o endereço local do computador (`ALLOW_LAN_ORIGIN=true`). No celular, no mesmo Wi-Fi, abra `http://<endereço do computador>:3000`; o inicializador Windows mostra esse endereço. A API e o banco continuam inacessíveis pela rede. O cadastro de novas empresas segue aberto por decisão da usuária. Passos e solução de problemas em [COMO-TESTAR-NO-WINDOWS.md](COMO-TESTAR-NO-WINDOWS.md). Acesso de fora de casa exige outra solução (hospedagem ou túnel com HTTPS) e não está configurado.
+
 ## Execução local com Node.js
 
 Requisitos: Node.js 24 LTS, pnpm 10.34.8 e PostgreSQL 17 (Docker Desktop serve para o banco). A partir da raiz do checkout:

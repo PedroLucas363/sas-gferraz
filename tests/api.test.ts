@@ -455,3 +455,198 @@ test("importação XLSX com prévia, confirmação e idempotência", async () =>
     1,
   );
 });
+test("rota do dia, estimativas de trajeto, endereço estruturado e histórico de todas as ações", async () => {
+  const cookie = await tenant(),
+    other = await tenant();
+  const put = (path: string, body: unknown, c = cookie) =>
+    req(path, "PUT", body, c);
+  const home = {
+    cep: "13010-000",
+    street: "Rua da Casa",
+    number: "10",
+    complement: "",
+    district: "Centro",
+    city: "Campinas",
+    state: "SP",
+  };
+  const settings = {
+    beige: "#F9EAD2",
+    green: "#546B57",
+    originAddress: "",
+    originAddressData: home,
+    bufferMinutes: 15,
+    dashboardIndicators: [],
+  };
+  const saved = await req(
+    "settings",
+    "PATCH",
+    {
+      name: "Empresa teste",
+      settings: {
+        ...settings,
+        originAddress: "Rua da Casa, 10, Centro, Campinas - SP, 13010-000",
+      },
+    },
+    cookie,
+  );
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  const origin = saved.data.settings.originAddress;
+  const service = await create(
+    "records/services",
+    { name: "Make", category: "Maquiagem", price: "180", duration: 60 },
+    cookie,
+  );
+  const addressA = { ...home, street: "Av. Brasil", number: "500" };
+  const client = await create(
+    "records/clients",
+    { name: "Cliente rota", addressData: addressA },
+    cookie,
+  );
+  // The single-line address is derived on the server from the structured one.
+  assert.equal(
+    client.address,
+    "Av. Brasil, 500, Centro, Campinas - SP, 13010-000",
+  );
+  const day = "2031-03-15";
+  const appointment = (
+    hhmm: string,
+    addressData: unknown,
+    status = "confirmed",
+  ) =>
+    create(
+      "records/appointments",
+      {
+        clientId: client.id,
+        title: "Atendimento rota",
+        startsAt: `${day}T${hhmm}:00-03:00`,
+        duration: 60,
+        addressData,
+        status,
+        dueDate: day,
+        items: [{ serviceId: service.id, quantity: 1, unitPrice: "180" }],
+      },
+      cookie,
+    );
+  const first = await appointment("09:00", addressA);
+  await appointment("09:00", addressA, "pending");
+  const second = await appointment("10:30", {
+    ...home,
+    street: "Rua B",
+    number: "2",
+  });
+  await appointment("14:00", addressA, "cancelled");
+  assert.equal(
+    (await put("agenda/legs", { origin, destination: "x" })).status,
+    400,
+  );
+  assert.equal(
+    (
+      await put("agenda/legs", {
+        origin,
+        destination: first.address,
+        minutes: 20,
+        distanceKm: "9.5",
+      })
+    ).status,
+    200,
+  );
+  const leg = {
+    origin: first.address,
+    destination: second.address,
+    minutes: 45,
+    distanceKm: "30",
+  };
+  await put("agenda/legs", { ...leg, minutes: 50 });
+  await put("agenda/legs", leg);
+  const route = (await req(`agenda/day?date=${day}`, "GET", undefined, cookie))
+    .data;
+  assert.equal(route.date, day);
+  assert.equal(route.summary.appointments, 3); // cancelled stays out
+  assert.equal(route.summary.stops, 2);
+  assert.equal(route.stops[0].appointments.length, 2);
+  assert.equal(route.summary.leaveAt, `${day}T11:25:00.000Z`); // 09:00 - 20 - 15
+  assert.deepEqual(route.stops[1].alert, {
+    level: "late",
+    minutes: 15,
+    estimated: true,
+  });
+  assert.equal(route.summary.pending, "540.00");
+  assert.equal(route.summary.distanceKm, "39.5");
+  assert.equal(route.mapsLinks.length, 1);
+  assert.match(route.stops[0].navigateUrl, /dir_action=navigate/);
+  // Without a date the route opens on the next day that still has something to attend.
+  const next = (await req("agenda/day", "GET", undefined, cookie)).data;
+  assert.equal(next.date, day);
+  assert.equal(next.nextDay, day);
+  assert.deepEqual(next.days, [{ date: day, count: 3, open: 3 }]);
+  // Another company sees neither the appointments nor the informed estimates.
+  const foreign = (await req(`agenda/day?date=${day}`, "GET", undefined, other))
+    .data;
+  assert.equal(foreign.summary.appointments, 0);
+  assert.equal(
+    await db.routeLeg.count({ where: { origin: first.address } }),
+    1,
+  );
+  assert.equal(
+    (await req("agenda/day?date=15/03/2031", "GET", undefined, cookie)).status,
+    400,
+  );
+  assert.equal((await req("cep/123", "GET", undefined, cookie)).status, 400);
+  // Audit: every action, with the values before and after.
+  const view = await create(
+    "views",
+    { name: "Minha visão", entity: "clients", query: {} },
+    cookie,
+  );
+  await req(`views/${view.id}`, "DELETE", undefined, cookie);
+  await fetch(`${base}/export/clients?q=${q({})}&format=csv`, {
+    headers: { Origin: origin, Cookie: cookie },
+  });
+  await req(
+    "settings",
+    "PATCH",
+    {
+      name: "Empresa teste",
+      settings: { ...settings, originAddress: origin, bufferMinutes: 30 },
+    },
+    cookie,
+  );
+  const audit = (await req("audit", "GET", undefined, cookie)).data;
+  const kinds = new Set(audit.map((a: any) => `${a.entity}:${a.action}`));
+  for (const kind of [
+    "settings:create",
+    "settings:update",
+    "clients:create",
+    "appointments:create",
+    "routeLegs:create",
+    "routeLegs:update",
+    "views:create",
+    "views:delete",
+    "exports:export",
+  ])
+    assert(kinds.has(kind), `missing audit ${kind}`);
+  assert(audit.every((a: any) => a.userName === "Teste Automatizado"));
+  assert(!JSON.stringify(audit).includes("passwordHash"));
+  const changes = audit.filter(
+    (a: any) => a.entity === "settings" && a.action === "update",
+  );
+  // The first change of the settings already carries the values that were in effect.
+  assert.equal(changes.at(-1).before.settings.bufferMinutes, 15);
+  assert.equal(changes.at(-1).before.settings.originAddress, "");
+  assert.equal(changes[0].before.settings.bufferMinutes, 15);
+  assert.equal(changes[0].after.settings.bufferMinutes, 30);
+  const created = audit.find(
+    (a: any) => a.entity === "appointments" && a.recordId === first.id,
+  );
+  assert.equal(created.after.items.length, 1);
+  const filtered = (
+    await req(
+      `audit?entity=clients&recordId=${client.id}`,
+      "GET",
+      undefined,
+      cookie,
+    )
+  ).data;
+  assert.equal(filtered.length, 1);
+  assert.equal((await req("audit", "GET", undefined, other)).data.length, 1);
+});

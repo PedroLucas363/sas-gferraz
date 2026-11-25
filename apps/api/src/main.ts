@@ -18,6 +18,7 @@ import { DataService } from "./data.service";
 import { BusinessService } from "./business.service";
 import { MediaService } from "./storage";
 import { ImportService } from "./import.service";
+import { RouteService } from "./route.service";
 import { AppController } from "./controller";
 @Catch()
 class Errors implements ExceptionFilter {
@@ -64,6 +65,7 @@ class Errors implements ExceptionFilter {
     BusinessService,
     MediaService,
     ImportService,
+    RouteService,
     { provide: APP_GUARD, useClass: AccessGuard },
   ],
 })

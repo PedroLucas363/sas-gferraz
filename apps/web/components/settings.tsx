@@ -1,8 +1,11 @@
 "use client";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { addressDataOf, defaultSettings, formatAddress } from "@gferraz/shared";
 import { api } from "./api";
 import { Button } from "./ui/button";
+import { AddressFields } from "./address-fields";
+import { History } from "./history";
 export function Settings() {
   const settings = useQuery({
     queryKey: ["settings"],
@@ -21,17 +24,16 @@ function SettingsForm({ data }: { data: any }) {
   const [form, setForm] = useState({
     name: data.name,
     settings: {
-      beige: "#F9EAD2",
-      green: "#546B57",
-      originAddress: "",
-      bufferMinutes: 15,
-      dashboardIndicators: [],
+      ...defaultSettings,
       ...data.settings,
+      originAddressData: addressDataOf(
+        data.settings.originAddressData,
+        data.settings.originAddress,
+      ),
     },
   });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const audit = useQuery({ queryKey: ["audit"], queryFn: () => api("audit") });
   return (
     <>
       <form
@@ -58,18 +60,6 @@ function SettingsForm({ data }: { data: any }) {
             <input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          </label>
-          <label>
-            Endereço de partida
-            <input
-              value={form.settings.originAddress}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  settings: { ...form.settings, originAddress: e.target.value },
-                })
-              }
             />
           </label>
           <label>
@@ -117,6 +107,20 @@ function SettingsForm({ data }: { data: any }) {
             />
           </label>
         </div>
+        <AddressFields
+          legend="Endereço de partida (sua casa ou estúdio)"
+          value={form.settings.originAddressData}
+          onChange={(next) =>
+            setForm({
+              ...form,
+              settings: {
+                ...form.settings,
+                originAddressData: next,
+                originAddress: formatAddress(next),
+              },
+            })
+          }
+        />
         <h3>Indicadores no dashboard</h3>
         <p className="muted">Sem seleção, todos os indicadores são exibidos.</p>
         <div className="column-picker">
@@ -195,21 +199,10 @@ function SettingsForm({ data }: { data: any }) {
       <section className="panel inset">
         <h2>Histórico de alterações</h2>
         <p className="muted">
-          Últimas 200 operações. O registro completo é incluído na exportação.
+          Tudo o que foi criado, alterado, excluído, exportado ou acessado, com
+          o valor de antes e de depois.
         </p>
-        {audit.data?.map((a: any) => (
-          <details key={a.id}>
-            <summary>
-              {new Date(a.createdAt).toLocaleString("pt-BR", {
-                timeZone: "America/Sao_Paulo",
-              })}{" "}
-              · {a.entity} · {a.action}
-            </summary>
-            <pre>
-              {JSON.stringify({ before: a.before, after: a.after }, null, 2)}
-            </pre>
-          </details>
-        ))}
+        <History filter />
       </section>
     </>
   );

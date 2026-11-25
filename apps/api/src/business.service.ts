@@ -11,6 +11,8 @@ import {
   expenseSchema,
   vehicleSchema,
   Entity,
+  formatAddress,
+  hasAddressData,
 } from "@gferraz/shared";
 import {
   db,
@@ -38,6 +40,9 @@ const models: Record<Entity, string> = {
   expenses: "expense",
   vehicles: "vehicle",
 };
+/** The single-line address always follows the structured one when it was filled. */
+const lineAddress = (v: { address: string; addressData: any }) =>
+  hasAddressData(v.addressData) ? formatAddress(v.addressData) : v.address;
 @Injectable()
 export class BusinessService {
   async get(c: Context, e: Entity, id: string) {
@@ -109,7 +114,11 @@ export class BusinessService {
     let data: any;
     if (e === "clients") {
       const v = clientSchema.parse(input);
-      data = { ...v, birthday: v.birthday ? new Date(v.birthday) : null };
+      data = {
+        ...v,
+        address: lineAddress(v),
+        birthday: v.birthday ? new Date(v.birthday) : null,
+      };
     } else if (e === "services") data = serviceSchema.parse(input);
     else if (e === "vehicles") data = vehicleSchema.parse(input);
     else if (e === "expenses") {
@@ -167,8 +176,11 @@ export class BusinessService {
           where: { organizationId: c.organizationId, appointmentId: id },
         });
       }
+      // The audit compares the contracted services too, not only the header.
+      if (current) before = { ...before, items: current.items };
       data = {
         ...v,
+        address: lineAddress(v),
         startsAt: new Date(v.startsAt),
         dueDate: new Date(v.dueDate),
         items: { create: items },
@@ -221,15 +233,23 @@ export class BusinessService {
         allocations: { create: v.allocations },
       };
     }
+    const include =
+      e === "appointments"
+        ? { items: true }
+        : e === "payments"
+          ? { allocations: true }
+          : undefined;
     const result = id
       ? await (tx as any)[model].update({
           where: {
             organizationId_id: { organizationId: c.organizationId, id },
           },
           data: { ...data, version: { increment: 1 } },
+          include,
         })
       : await (tx as any)[model].create({
           data: { ...data, organizationId: c.organizationId },
+          include,
         });
     await audit(tx, c, e, result.id, id ? "update" : "create", before, result);
     return result;
@@ -264,7 +284,15 @@ export class BusinessService {
         where: { organizationId_id: { organizationId: c.organizationId, id } },
         data: { ...data, version: { increment: 1 } },
       });
-      await audit(tx, c, e, id, "archive", before, after);
+      await audit(
+        tx,
+        c,
+        e,
+        id,
+        ["payments", "expenses"].includes(e) ? "void" : "archive",
+        before,
+        after,
+      );
       return { ok: true };
     });
   }

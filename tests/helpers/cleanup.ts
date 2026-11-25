@@ -17,6 +17,7 @@ export async function cleanupTenant(organizationId: string) {
       "allocation",
       "payment",
       "trip",
+      "routeLeg",
       "media",
       "expense",
       "appointmentItem",

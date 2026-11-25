@@ -11,6 +11,7 @@ import { api, brl, display, today } from "./api";
 import { Dialog } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { DataTable } from "./data-table";
+import { History } from "./history";
 export function Detail({
   entity,
   id,
@@ -66,7 +67,6 @@ export function Detail({
             <div className="detail-header">
               <div>
                 <h2>{r.name || r.title || r.description || "Recebimento"}</h2>
-                <small className="muted">ID: {r.id}</small>
               </div>
               {entity !== "payments" && (
                 <Button onClick={onEdit}>Editar cadastro</Button>
@@ -78,6 +78,7 @@ export function Detail({
                 ...(["clients", "appointments"].includes(entity)
                   ? ["history", "finance", "gallery"]
                   : []),
+                "changes",
               ].map((k) => (
                 <button
                   className={tab === k ? "active" : ""}
@@ -90,6 +91,7 @@ export function Detail({
                       history: "Histórico",
                       finance: "Financeiro",
                       gallery: "Fotografias",
+                      changes: "Alterações",
                     }[k]
                   }
                 </button>
@@ -107,6 +109,10 @@ export function Detail({
                           "passwordHash",
                           "archivedAt",
                           "voidedAt",
+                          "clientId",
+                          "eventId",
+                          "appointmentId",
+                          "version",
                         ].includes(k) && typeof v !== "object",
                     )
                     .map(([k, v]) => (
@@ -120,7 +126,13 @@ export function Detail({
                                 preferences: "Preferências",
                                 birthday: "Nascimento",
                                 receivedAt: "Recebimento",
-                                version: "Versão",
+                                discount: "Desconto",
+                                extra: "Adicionais",
+                                actualDuration: "Duração realizada (min)",
+                                voidReason: "Motivo do estorno",
+                                kmPerLiter: "Consumo (km/L)",
+                                fuelPrice: "Preço do combustível",
+                                annualKm: "Quilometragem anual",
                               } as any
                             )[k] ||
                             k}
@@ -227,6 +239,7 @@ export function Detail({
                 )}
               </>
             )}
+            {tab === "changes" && <History entity={entity} recordId={id} />}
             {tab === "gallery" && (
               <Gallery
                 clientId={entity === "clients" ? id : r.clientId}

@@ -1,6 +1,6 @@
 # Progresso do projeto
 
-Atualizado em 26/10/2026 (America/Sao_Paulo). Repositório recebido sem commits e sem arquivos. Os requisitos originais e as atualizações técnicas foram preservados em `docs/`.
+Atualizado em 16/11/2026 (America/Sao_Paulo). Repositório recebido sem commits e sem arquivos. Os requisitos originais e as atualizações técnicas foram preservados em `docs/`.
 
 ## Implementado
 
@@ -11,7 +11,11 @@ Atualizado em 26/10/2026 (America/Sao_Paulo). Repositório recebido sem commits 
 - Consultas: `DataTable` central com pesquisa, filtros E/OU, múltiplas ordens, grupos e subtotais, colunas visíveis/ordem/largura, paginação e exportações CSV/XLSX; visualizações persistidas, edição/renomeação/duplicação/exclusão.
 - Dashboards: indicadores reais com fontes explícitas, detalhes com a mesma tabela e período, evolução mensal clicável, atualização após mutações e consulta automática entre sessões.
 - Histórico de cliente/atendimento: dados, serviços, financeiro e galeria. Originais locais privados, miniaturas, consentimento, upload múltiplo, exclusão e verificação de arquivos ausentes.
-- Logística: cadastro de veículos e custos anuais, estimativas de trechos, agenda por dia/intervalo/mês, roteiro ordenado, conflito de horários e abertura de mapas com estimativas manuais identificadas.
+- Logística: cadastro de veículos e custos anuais, trechos realizados para custo, agenda por dia/intervalo/mês.
+- Rota do dia (16/11/2026): tela própria, inicial no celular, que abre no próximo dia com atendimento em aberto e permite escolher outro dia. Mostra saída de casa, paradas em ordem de horário (pessoas no mesmo endereço formam uma parada), tempo e distância de cada trecho, chegada prevista, término, volta para casa, total do trajeto e valor a receber no dia. Alerta atraso, horário apertado e sobreposição. Abre a rota completa e cada trecho no Google Maps por link gratuito e navega até cada parada. Os tempos vêm de estimativas informadas pela usuária, guardadas por par de endereços e reaproveitadas; nada é estimado automaticamente.
+- Endereço por CEP (16/11/2026): clientes, atendimentos e endereço de partida têm CEP, rua, número, complemento, bairro, cidade e UF. O CEP preenche o restante (ViaCEP, com BrasilAPI de reserva) e todos os campos continuam editáveis. O atendimento novo recebe o endereço da cliente.
+- Histórico (16/11/2026): todas as ações gravam auditoria, inclusive acesso, visualizações salvas, exportações, prévia de importação, estimativas de trajeto e criação da empresa. A tela mostra quem fez, quando e o valor de antes e de depois por campo; cada cadastro tem a aba “Alterações”.
+- Visual (16/11/2026): escala tipográfica com corpo de 16 px e mínimo de 11 px apenas em rótulos decorativos, alvos de toque de 44 px, contraste revisado, formulários em uma coluna e diálogos em tela cheia no celular, tabelas em cartões no celular.
 - Importação: leitura XLSX/CSV, múltiplas abas, prévia persistida, mapeamento revisável, preservação da origem/fórmulas, confirmação por linha, consolidação supervisionada, deduplicação exata e resultado por linha.
 - Configurações de nome/cores, endereço de partida, margem entre atendimentos e indicadores visíveis; auditoria, exportação completa e scripts de backup/restauração.
 
@@ -33,12 +37,13 @@ O workflow de CI está configurado, mas ainda não foi executado no GitHub. Wind
 ## Pendente e limites explícitos
 
 - Revisão e migração efetiva dos registros históricos da planilha real; nenhuma linha foi gravada sem revisão da usuária.
-- Integração automática de rotas/trânsito, reordenação manual visual de paradas e validação do planejamento completo.
+- Tempo e distância automáticos (Google Routes API ou outro provedor): a rota do dia usa apenas estimativas informadas. Geração dos km rodados a partir da rota e reordenação manual de paradas.
 - Recorrência automática de despesas e agenda visual em grade.
 - Identidade com upload de logotipo, editor visual de campos personalizados e composição de filtros aninhados.
 - Seletores de valores por tipo e filtros aninhados mais completos no editor de consultas.
 - Alocações financeiras por item individual dentro de um mesmo atendimento (a versão atual aloca por atendimento).
-- Permissões granulares, convites, recuperação de senha, MFA e política de cadastro para servidor aberto.
+- Permissões granulares, convites, recuperação de senha e MFA. O cadastro de novas empresas permanece aberto por decisão da usuária em 16/11/2026, inclusive para aparelhos da rede local.
+- Acesso de fora da rede local (4G), HTTPS e cópia de segurança automática.
 - Segmentação comercial avançada, gráficos detalhados por categoria/produto e comparação dedicada entre períodos.
 - Mapeamento visual de qualquer planilha arbitrária; o importador atual reconhece as estruturas observadas e conserva dados não mapeados.
 - Validação de backup/restauração completa com imagens numa instalação Windows real; hardening, testes de escala e auditoria externa.
@@ -48,3 +53,20 @@ Estes itens não são anunciados como concluídos. A próxima sessão deve mante
 ## Distribuição do código
 
 A publicação no GitHub foi solicitada pela usuária em 26/10/2026. Foram incluídos um inicializador Windows e um guia para obter o projeto pelo GitHub e executar o Compose localmente. O link privado da planilha foi retirado da especificação versionada; o arquivo original permanece privado e inalterado. A validação de Windows real continua pendente. O upload do código não implanta uma aplicação web pública nem publica o snapshot da nuvem.
+
+## Etapa de 16/11/2026: rota do dia, CEP, histórico e visual
+
+Validação executada em Windows 11 com Node 22.22.3 (o projeto pede Node 24; o pnpm apenas avisou) e PostgreSQL 17 do Compose:
+
+- Migração `202611160001_route_address` aplicada sobre a base existente, depois de um `pg_dump` em `.data/backups/`.
+- `pnpm typecheck`, ESLint e Prettier aprovados.
+- `pnpm test`: **18 aprovados, 0 falhas** (15 unitários e 3 integrados contra a API e o banco reais).
+- Conferência manual no navegador, em 375 px e em desktop: rota do dia, estimativa de trecho, cadastro por CEP com consulta real, endereço da cliente no atendimento, histórico com antes e depois, tabelas em cartões.
+
+Não executado nesta etapa: `pnpm test:e2e` (o seletor do endereço no fluxo foi ajustado, sem rodar), `pnpm build`, imagens Docker e teste em um celular real. Detalhes em `docs/validation.md`.
+
+## Etapa de 16/11/2026: acesso pelo celular na rede local
+
+- O Compose publica a interface na rede local (`WEB_BIND`) e a API aceita o endereço local do computador (`ALLOW_LAN_ORIGIN`), mantendo recusadas as origens de outros sites. API e banco continuam fora da rede.
+- O inicializador Windows mostra o endereço para abrir no celular e avisa quando a rede está marcada como Pública.
+- O limite de tentativas de login continua único para todos os aparelhos (15 a cada 15 minutos), porque o proxy não informa o endereço de cada um.

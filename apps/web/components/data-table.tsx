@@ -492,6 +492,12 @@ export function DataTable({
                     {row.getVisibleCells().map((cell) => (
                       <td
                         key={cell.id}
+                        data-label={String(cell.column.columnDef.header)}
+                        className={
+                          [null, undefined, ""].includes(cell.getValue() as any)
+                            ? "is-empty"
+                            : undefined
+                        }
                         style={{ width: cell.column.getSize() }}
                       >
                         {flexRender(

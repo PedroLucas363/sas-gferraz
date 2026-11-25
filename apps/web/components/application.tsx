@@ -22,6 +22,7 @@ import {
   Menu,
   Plus,
   ArrowUpRight,
+  Navigation,
 } from "lucide-react";
 import { Entity, entityLabels, querySchema, Query } from "@gferraz/shared";
 import { api, today, ApiError } from "./api";
@@ -31,10 +32,12 @@ import { RecordForm } from "./record-form";
 import { Detail } from "./details";
 import { Imports } from "./imports";
 import { Agenda } from "./agenda";
+import { DayRoute } from "./day-route";
 import { Settings } from "./settings";
 import { Button } from "./ui/button";
 const nav = [
   ["dashboard", "Visão geral", LayoutDashboard],
+  ["route", "Rota do dia", Navigation],
   ["clients", "Clientes", Users],
   ["agenda", "Agenda", CalendarDays],
   ["appointments", "Atendimentos", Sparkles],
@@ -82,7 +85,20 @@ function Shell() {
     queryFn: () => api("auth/me"),
     refetchInterval: false,
   });
-  const module = params.get("module") || "dashboard";
+  // On a phone the day starts with the route; on a computer, with the overview.
+  const [compact] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 760px)").matches,
+  );
+  const module = params.get("module") || (compact ? "route" : "dashboard");
+  const routeDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date") || "")
+    ? params.get("date")
+    : null;
+  const openRoute = (date: string | null) =>
+    router.push("?module=route" + (date ? "&date=" + date : ""), {
+      scroll: false,
+    });
   let query: Query;
   try {
     query = querySchema.parse(
@@ -90,7 +106,9 @@ function Shell() {
         ? JSON.parse(params.get("q")!)
         : module === "dashboard"
           ? { from: today().slice(0, 7) + "-01", to: today() }
-          : {},
+          : module === "clients"
+            ? { sort: [{ id: "name", desc: false }] }
+            : {},
     );
   } catch {
     query = querySchema.parse({});
@@ -219,6 +237,8 @@ function Shell() {
                       "Mais clareza para cuidar do que você faz de melhor.",
                     clients:
                       "Cada cliente tem uma história. Aqui, você acompanha todas.",
+                    route:
+                      "Seu dia em ordem: horários, trajetos e avisos de atraso.",
                     agenda: "Organize seus horários e prepare seu dia.",
                     appointments: "Do primeiro contato ao resultado final.",
                     payments: "Acompanhe cada entrada e cada saldo.",
@@ -239,7 +259,7 @@ function Shell() {
                 <Plus size={18} /> Novo registro
               </Button>
             )}
-            {module === "dashboard" && (
+            {(module === "dashboard" || module === "route") && (
               <Button
                 onClick={() =>
                   setDialog({ entity: "appointments", edit: true })
@@ -263,8 +283,18 @@ function Shell() {
               onQuery={setQuery}
               onOpen={(id) => open(entity, id)}
             />
+          ) : module === "route" ? (
+            <DayRoute
+              date={routeDate}
+              onDate={openRoute}
+              onOpen={(id) => open("appointments", id)}
+              onSettings={() => navigate("settings")}
+            />
           ) : module === "agenda" ? (
-            <Agenda onOpen={(id) => open("appointments", id)} />
+            <Agenda
+              onOpen={(id) => open("appointments", id)}
+              onRoute={openRoute}
+            />
           ) : module === "reports" ? (
             <>
               <div className="panel period-bar">

@@ -52,6 +52,20 @@ Recebimentos não são editados destrutivamente. Uma correção é feita por est
 
 Taxas registradas em pagamentos já entram no resultado: não cadastre a mesma taxa como despesa avulsa. Reembolso diminui caixa e reabre saldo; não altera a prestação histórica. Cancelamento retira o contrato das contas a receber e do faturamento, preservando movimentos; devolva os valores recebidos quando aplicável. A regra de reconhecimento de taxas por data efetiva é uma decisão inicial explícita e poderá ser refinada para competência contratual.
 
+## Endereços e estimativas de trajeto
+
+`Client.addressData` e `Appointment.addressData` (JSON) guardam CEP, rua, número, complemento, bairro, cidade e UF. `address` continua sendo a linha única e é recalculada pelo servidor sempre que `addressData` tem conteúdo: `Rua, número - complemento, bairro, cidade - UF, CEP`. O endereço de partida fica em `Organization.settings` (`originAddress` e `originAddressData`).
+
+`RouteLeg` guarda uma estimativa por empresa e par de endereços: `originKey` e `destinationKey` (texto sem acentos, pontuação e maiúsculas), os endereços como foram informados, `minutes`, `distanceKm`, `source` (`manual` hoje) e `updatedAt`. Há unicidade por empresa e par, e limite de 0 a 1440 minutos. Não é despesa nem custo: serve apenas ao planejamento do dia.
+
+Regras da rota do dia:
+
+- **Saída de casa** = início do primeiro atendimento − tempo do trecho − margem de segurança.
+- **Chegada prevista** = fim da parada anterior + tempo do trecho. **Folga** = intervalo entre as paradas − tempo do trecho.
+- **Atraso**: folga negativa. **Apertado**: folga menor que a margem. **Sobreposição**: sem tempo informado, a parada anterior termina depois do início da seguinte.
+- **Volta para casa** = fim da última parada + tempo do trecho de volta.
+- **Trajeto do dia** soma apenas trechos com estimativa; a tela informa quantos faltam.
+
 ## Veículos e estimativas
 
 `Custo/km = preço do combustível / consumo + (seguro + manutenção + pneus + óleo + impostos + depreciação + outros custos anuais) / km anuais`.

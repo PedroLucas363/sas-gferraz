@@ -13,10 +13,32 @@ import {
   expenseSchema,
   vehicleSchema,
   statusLabels,
+  fieldLabels,
+  AddressData,
+  addressDataOf,
+  formatAddress,
 } from "@gferraz/shared";
 import { api, allRows, brl, today } from "./api";
 import { Dialog } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { AddressFields } from "./address-fields";
+const errorLabels: Record<string, string> = {
+  ...fieldLabels,
+  clientId: "Cliente",
+  items: "Serviços contratados",
+  allocations: "Distribuição entre atendimentos",
+  title: "Nome do atendimento",
+  startsAt: "Data e horário",
+  receivedAt: "Data do recebimento",
+  addressData: "Endereço",
+  discount: "Desconto",
+  extra: "Adicionais",
+  actualDuration: "Duração realizada",
+  kmPerLiter: "Consumo",
+  fuelPrice: "Preço do combustível",
+  annualKm: "Quilometragem anual",
+  birthday: "Nascimento",
+};
 const schemas: any = {
   clients: clientSchema,
   services: serviceSchema,
@@ -155,6 +177,9 @@ function Editor({
     "paidOn",
   ])
     if (values[key]) values[key] = values[key].slice(0, 10);
+  // A free-text address saved before the CEP lookup existed becomes the street line.
+  values.addressData = addressDataOf(values.addressData, values.address);
+  const [address, setAddress] = useState<AddressData>(values.addressData);
   const form = useForm<any>({
     resolver: zodResolver(schemas[entity]) as any,
     defaultValues: values,
@@ -167,7 +192,7 @@ function Editor({
   const lookups = useQuery({
     queryKey: ["lookups"],
     queryFn: async () => ({
-      clients: await allRows("clients"),
+      clients: await allRows("clients", [{ id: "name", desc: false }]),
       services: await allRows("services"),
       appointments: await allRows("appointments"),
       events: await api("events"),
@@ -182,6 +207,20 @@ function Editor({
         price: item.unitPrice,
       });
   const watch = form.watch();
+  function applyAddress(next: AddressData) {
+    setAddress(next);
+    form.setValue("addressData", next);
+    form.setValue("address", formatAddress(next));
+  }
+  async function copyClientAddress(clientId: string) {
+    if (!clientId) return;
+    try {
+      const c = await api(`records/clients/${clientId}`);
+      applyAddress(addressDataOf(c.addressData, c.address));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   function field(
     key: string,
     label: string,
@@ -217,6 +256,7 @@ function Editor({
     label: string,
     options: any[],
     nullable = false,
+    onPick?: (value: string) => void,
   ) {
     return (
       <label>
@@ -225,6 +265,7 @@ function Editor({
           aria-label={label}
           {...form.register(key, {
             setValueAs: (v) => (nullable ? v || null : v),
+            onChange: (e) => onPick?.(e.target.value),
           })}
         >
           <option value="">Selecione</option>
@@ -263,7 +304,11 @@ function Editor({
             {field("email", "E-mail", "email")}
             {field("birthday", "Nascimento", "date")}
           </div>
-          {field("address", "Endereço")}
+          <AddressFields
+            legend="Endereço"
+            value={address}
+            onChange={applyAddress}
+          />
           <label>
             Preferências e sensibilidades autorizadas
             <textarea {...form.register("preferences")} />
@@ -306,7 +351,14 @@ function Editor({
       )}
       {entity === "appointments" && (
         <>
-          {select("clientId", "Cliente", lookups.data?.clients || [])}
+          {select(
+            "clientId",
+            "Cliente",
+            lookups.data?.clients || [],
+            false,
+            // A new appointment starts at the client's own address.
+            (id) => !formatAddress(address) && copyClientAddress(id),
+          )}
           <div className="form-grid">
             {field("title", "Nome do atendimento", "text", { required: true })}
             <label>
@@ -332,7 +384,20 @@ function Editor({
             {select("status", "Situação", Object.entries(statusLabels))}
             {field("dueDate", "Vencimento do saldo", "date")}
           </div>
-          {field("address", "Endereço do atendimento")}
+          <AddressFields
+            legend="Endereço do atendimento"
+            value={address}
+            onChange={applyAddress}
+          />
+          {watch.clientId && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => copyClientAddress(watch.clientId)}
+            >
+              Usar o endereço da cliente
+            </Button>
+          )}
           {select(
             "eventId",
             "Evento em grupo (opcional)",
@@ -572,8 +637,11 @@ function Editor({
       )}
       {Object.keys(form.formState.errors).length > 0 && (
         <p role="alert" className="error">
-          Revise os campos: {Object.keys(form.formState.errors).join(", ")}.
-          Verifique valores, datas e seleções obrigatórias.
+          Revise:{" "}
+          {Object.keys(form.formState.errors)
+            .map((k) => errorLabels[k] || k)
+            .join(", ")}
+          . Verifique valores, datas e seleções obrigatórias.
         </p>
       )}
       {error && (
