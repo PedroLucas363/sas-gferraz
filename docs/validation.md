@@ -100,3 +100,24 @@ Sintoma: `INICIAR-WINDOWS.cmd` parava em "A interface ainda nao respondeu", com 
 Causa: a espera consultava `http://localhost:3000` com tempo limite de 2 s. No Windows, `localhost` resolve primeiro para `::1`; nada escuta em `::1:3000`, e o Windows leva cerca de 2 s para desistir dessa conexão antes de tentar `127.0.0.1`. Todas as 60 tentativas esgotavam o tempo.
 
 Correção: a espera usa `http://127.0.0.1:3000` com tempo limite de 5 s. Verificado: a checagem passou em 0,3 s com o stack do Compose no ar; a consulta a `localhost` continuou esgotando em 2 s.
+
+## Etapa de 25/11/2026: formulários mais simples
+
+Ambiente: Windows 11, Node 22.22.3, stack do Compose reconstruído com o código da etapa.
+
+| Verificação                    | Resultado                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| TypeScript / ESLint / Prettier | Aprovados                                                                                              |
+| Testes unitários/integrados    | 23 aprovados, 0 falhas; inclui situação por palavra, evento repetido e prévia do atendimento           |
+| Navegador (desktop e 375 px)   | Empresa de teste criada e removida ao final                                                            |
+| Testes de navegador (e2e)      | Não executados localmente; ajustados para a busca de cliente e o rótulo do valor recebido; rodam na CI |
+
+No navegador foram conferidos: “R$” dentro do campo de preço; lista de clientes de A a Z e busca “aurea” encontrando “Áurea”; endereço da cliente copiado e trajeto de 25 min encontrado; serviços com duração na lista; duração sugerida 02:40 (02:15 de serviços + 00:25 de ida); deslocamento sugerido R$ 27,79 (12,5 km ida e volta a R$ 1,11/km); total R$ 477,79 igual ao gravado pelo servidor; vencimento acompanhando a troca de data; nome automático pelos serviços; edição sem trocar valores salvos; dashboard de 01/11 a 30/11; filtro “Confirmado” encontrando o atendimento; evento repetido recusado com 409.
+
+Achado durante a conferência: o campo nativo de hora mostrava “01:00 AM” para uma duração de uma hora num navegador em inglês. A duração passou a usar campo próprio com máscara `00:00`. O campo “Horário” continua nativo, porque representa hora do relógio.
+
+### Complemento de 25/11/2026: tabela de deslocamento e recebimento
+
+- Testes unitários/integrados: **24 aprovados, 0 falhas** contra o stack do Compose (novos: faixa e combustível da tabela; prévia com tabela, acima da última faixa e faixas repetidas recusadas).
+- CI do PR: o teste de navegador falhou duas vezes nesta etapa — a opção de serviço passou a mostrar a duração e o campo “Valor recebido” perdeu o nome acessível com o “R$” dentro do rótulo. Ambos corrigidos; o teste de navegador não roda neste computador (o Chromium do Playwright não abre no ambiente).
+- Navegador, com empresa de teste removida ao final: tabela em Configurações com colunas alinhadas e “de 21 a 30 km”; atendimento com ida e volta de 25 km sugerindo R$ 30,00 (faixa até 30 km, etanol) e custo do carro R$ 27,79 para comparação; busca de serviço com preço e duração; “Registrar recebimento (R$ 390,00)” abrindo o recebimento com cliente, atendimento e saldo preenchidos.

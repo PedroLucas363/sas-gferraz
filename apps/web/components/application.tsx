@@ -25,7 +25,7 @@ import {
   Navigation,
 } from "lucide-react";
 import { Entity, entityLabels, querySchema, Query } from "@gferraz/shared";
-import { api, today, ApiError } from "./api";
+import { api, monthRange, ApiError } from "./api";
 import { DataTable } from "./data-table";
 import { Dashboard } from "./dashboard";
 import { RecordForm } from "./record-form";
@@ -78,6 +78,7 @@ function Shell() {
     entity: Entity;
     id?: string;
     edit: boolean;
+    initial?: Record<string, unknown>;
   } | null>(null);
   const [reportEntity, setReportEntity] = useState<Entity>("appointments");
   const me = useQuery({
@@ -105,7 +106,7 @@ function Shell() {
       params.get("q")
         ? JSON.parse(params.get("q")!)
         : module === "dashboard"
-          ? { from: today().slice(0, 7) + "-01", to: today() }
+          ? monthRange()
           : module === "clients"
             ? { sort: [{ id: "name", desc: false }] }
             : {},
@@ -343,6 +344,7 @@ function Shell() {
             key={`${dialog.entity}-${dialog.id}`}
             entity={dialog.entity}
             id={dialog.id}
+            initial={dialog.initial}
             onClose={() => setDialog(null)}
           />
         ) : (
@@ -352,6 +354,9 @@ function Shell() {
             id={dialog.id!}
             onClose={() => setDialog(null)}
             onEdit={() => setDialog({ ...dialog, edit: true })}
+            onReceive={(initial) =>
+              setDialog({ entity: "payments", edit: true, initial })
+            }
             onOpen={open}
           />
         ))}

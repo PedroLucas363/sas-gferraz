@@ -74,13 +74,11 @@ test("cadastro, atendimento, pagamento parcial, indicador e visualização salva
     page.getByRole("heading", { name: "Atendimentos", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Novo registro" }).click();
-  await page
-    .getByLabel("Cliente", { exact: true })
-    .selectOption({ label: "Cliente Navegador" });
+  await page.getByLabel("Cliente", { exact: true }).fill("navega");
+  await page.getByRole("option", { name: /Cliente Navegador/ }).click();
   await page.getByLabel("Nome do atendimento").fill("Atendimento integração");
-  await page
-    .getByLabel("Serviço", { exact: true })
-    .selectOption({ label: "Maquiagem e penteado" });
+  await page.getByLabel("Serviço", { exact: true }).fill("penteado");
+  await page.getByRole("option", { name: /Maquiagem e penteado/ }).click();
   await page.getByRole("button", { name: "Salvar registro" }).click();
   await expect(
     page.getByRole("cell", { name: "Atendimento integração", exact: true }),
@@ -90,13 +88,11 @@ test("cadastro, atendimento, pagamento parcial, indicador e visualização salva
     page.getByRole("heading", { name: "Recebimentos", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Novo registro" }).click();
-  await page
-    .getByLabel("Cliente", { exact: true })
-    .selectOption({ label: "Cliente Navegador" });
-  await page
-    .getByLabel("Atendimento", { exact: true })
-    .selectOption({ index: 1 });
-  await page.getByLabel("Valor recebido (R$)").fill("50");
+  await page.getByLabel("Cliente", { exact: true }).fill("navega");
+  await page.getByRole("option", { name: /Cliente Navegador/ }).click();
+  await page.getByLabel("Atendimento", { exact: true }).click();
+  await page.getByRole("option", { name: /Atendimento integração/ }).click();
+  await page.getByLabel("Valor recebido", { exact: true }).fill("50");
   await page.getByRole("button", { name: "Salvar registro" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "Visão geral", exact: true }).click();

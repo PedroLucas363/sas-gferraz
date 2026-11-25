@@ -14,6 +14,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  ConflictException,
   ParseUUIDPipe,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
@@ -36,6 +37,7 @@ import {
   vehicleSchema,
   addressDataSchema,
   defaultSettings,
+  travelFeeTableSchema,
 } from "@gferraz/shared";
 import { db, Context, owned, atomic, expectVersion, audit, plain } from "./db";
 import { DataService } from "./data.service";
@@ -46,6 +48,13 @@ import { ImportService } from "./import.service";
 import { selectRows } from "./query";
 import { RouteService } from "./route.service";
 import { lookupCep } from "./cep";
+const eventKey = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 type AuthReq = Request & { user: Context };
 const entity = (s: string) => z.enum(entities).parse(s);
 const parseQuery = (v?: string) => querySchema.parse(v ? JSON.parse(v) : {});
@@ -324,6 +333,7 @@ export class AppController {
   @Get("events") events(@Req() req: AuthReq) {
     return db.event.findMany({
       where: { organizationId: req.user.organizationId },
+      orderBy: { name: "asc" },
     });
   }
   @Post("events") async event(@Req() req: AuthReq, @Body() body: unknown) {
@@ -333,7 +343,19 @@ export class AppController {
         notes: z.string().max(2000).default(""),
       })
       .parse(body);
+    v.name = v.name.trim().replace(/\s+/g, " ");
     return atomic(async (tx) => {
+      // Same name ignoring case, accents and spacing counts as a duplicate.
+      const key = eventKey(v.name);
+      const existing = await tx.event.findMany({
+        where: { organizationId: req.user.organizationId },
+        select: { name: true },
+      });
+      const twin = existing.find((e) => eventKey(e.name) === key);
+      if (twin)
+        throw new ConflictException(
+          `Já existe um evento chamado "${twin.name}". Escolha-o na lista ou use outro nome.`,
+        );
       const r = await tx.event.create({
         data: { ...v, organizationId: req.user.organizationId },
       });
@@ -363,6 +385,36 @@ export class AppController {
   })
   day(@Req() req: AuthReq, @Q("date") day?: string) {
     return this.routes.day(req.user, day ? date.parse(day) : undefined);
+  }
+  @Post("agenda/quote")
+  @ApiOperation({
+    summary:
+      "Prévia do atendimento: total, deslocamento sugerido e duração sugerida. Não grava nada.",
+  })
+  quote(@Req() req: AuthReq, @Body() body: unknown) {
+    // Lenient on purpose: the form asks while the user is still typing.
+    const amount = money.catch("0");
+    return this.routes.quote(
+      req.user,
+      z
+        .object({
+          address: z.string().max(500).catch(""),
+          items: z
+            .array(
+              z.object({
+                serviceId: z.string().max(40).catch(""),
+                quantity: z.number().int().min(1).max(100).catch(1),
+                unitPrice: amount,
+              }),
+            )
+            .max(30)
+            .catch([]),
+          discount: amount,
+          extra: amount,
+          travelFee: amount,
+        })
+        .parse(body ?? {}),
+    );
   }
   @Put("agenda/legs")
   @ApiOperation({
@@ -407,6 +459,7 @@ export class AppController {
           originAddressData: addressDataSchema.optional(),
           bufferMinutes: z.number().int().min(0).max(240),
           dashboardIndicators: z.array(z.string()).max(20).optional(),
+          travelFeeTable: travelFeeTableSchema.optional(),
         }),
       })
       .parse(body);

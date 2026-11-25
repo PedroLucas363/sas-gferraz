@@ -18,7 +18,7 @@ Filtros aninhados E/OU, agrupamento visual de linhas, comparativos de período, 
 
 ## 5. Logística e identidade
 
-A rota do dia existe com links gratuitos do Google Maps e estimativas informadas (ver PROGRESS.md). Próximo passo: provedor opcional de tempo e distância (Google Routes API) atrás da mesma tabela `RouteLeg`, com chave só no servidor, teto de cota e tratamento de indisponibilidade; gravar os km do dia como trechos realizados para o fechamento do mês; edição visual da sequência; grade de agenda diária/semanal/mensal. Logotipo privado da empresa, preferências de visualização e campos personalizados com editor visual.
+A rota do dia existe com links gratuitos do Google Maps e estimativas informadas (ver PROGRESS.md). O cadastro de atendimento já usa esses trechos para sugerir deslocamento e duração. Próximo passo: provedor opcional de tempo e distância (Google Routes API) atrás da mesma tabela `RouteLeg`, com chave só no servidor, teto de cota e tratamento de indisponibilidade; gravar os km do dia como trechos realizados para o fechamento do mês; edição visual da sequência; grade de agenda diária/semanal/mensal. Logotipo privado da empresa, preferências de visualização e campos personalizados com editor visual.
 
 ## 6. Qualidade operacional
 

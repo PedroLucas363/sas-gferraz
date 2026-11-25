@@ -12,18 +12,21 @@ import { Dialog } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { DataTable } from "./data-table";
 import { History } from "./history";
+import { nonNegative } from "./ui/number";
 export function Detail({
   entity,
   id,
   onClose,
   onEdit,
   onOpen,
+  onReceive,
 }: {
   entity: Entity;
   id: string;
   onClose: () => void;
   onEdit: () => void;
   onOpen: (e: Entity, id: string) => void;
+  onReceive?: (initial: Record<string, unknown>) => void;
 }) {
   const cache = useQueryClient();
   const [error, setError] = useState("");
@@ -68,9 +71,28 @@ export function Detail({
               <div>
                 <h2>{r.name || r.title || r.description || "Recebimento"}</h2>
               </div>
-              {entity !== "payments" && (
-                <Button onClick={onEdit}>Editar cadastro</Button>
-              )}
+              <div className="detail-actions">
+                {entity === "appointments" &&
+                  onReceive &&
+                  Number(r.pending) > 0 && (
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        onReceive({
+                          clientId: r.clientId,
+                          allocations: [
+                            { appointmentId: r.id, amount: r.pending },
+                          ],
+                        })
+                      }
+                    >
+                      Registrar recebimento ({brl(r.pending)})
+                    </Button>
+                  )}
+                {entity !== "payments" && (
+                  <Button onClick={onEdit}>Editar cadastro</Button>
+                )}
+              </div>
             </div>
             <div className="tabs">
               {[
@@ -296,6 +318,7 @@ export function Detail({
                       <input
                         type="number"
                         step="0.01"
+                        {...nonNegative}
                         value={refund.amount}
                         onChange={(e) =>
                           setRefund({ ...refund, amount: e.target.value })

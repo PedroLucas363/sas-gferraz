@@ -5,6 +5,7 @@ import { querySchema, Query } from "@gferraz/shared";
 import { api, allRows, today, day, brl } from "./api";
 import { DataTable } from "./data-table";
 import { Button } from "./ui/button";
+import { nonNegative } from "./ui/number";
 export function Agenda({
   onOpen,
   onRoute,
@@ -163,7 +164,7 @@ export function Agenda({
                 required
                 type="number"
                 step={k === "minutes" ? "1" : "0.01"}
-                min="0"
+                {...nonNegative}
                 value={(trip as any)[k]}
                 onChange={(e) =>
                   setTrip({

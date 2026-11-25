@@ -29,6 +29,7 @@ import {
   assertTotal,
   appointmentTotal,
   allocatedPaid,
+  balance,
   vehicleCost,
 } from "./finance";
 import { appointmentInclude } from "./data.service";
@@ -54,6 +55,10 @@ export class BusinessService {
       if (!a) throw new BadRequestException("Atendimento não encontrado");
       return {
         ...a,
+        // Figures from finance.ts, so screens never add up the balance themselves.
+        total: appointmentTotal(a).toFixed(2),
+        paid: allocatedPaid(a).toFixed(2),
+        pending: balance(a).toFixed(2),
         allocationDetails: a.allocations.map((x) => ({
           paymentId: x.paymentId,
           receivedAt: x.payment.receivedAt,

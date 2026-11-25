@@ -1,4 +1,10 @@
-import { querySchema, Entity, Query, statusLabels } from "@gferraz/shared";
+import {
+  querySchema,
+  Entity,
+  Query,
+  fieldValueLabels,
+  valueLabel,
+} from "@gferraz/shared";
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -57,11 +63,16 @@ export const today = () =>
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+/** First and last day of the month that contains `date` (YYYY-MM-DD). */
+export function monthRange(date = today()) {
+  const [y, m] = date.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const ym = date.slice(0, 7);
+  return { from: `${ym}-01`, to: `${ym}-${String(last).padStart(2, "0")}` };
+}
 export function display(field: string, v: unknown) {
   if (v === null || v === undefined || v === "") return "—";
-  if (field === "status") return statusLabels[String(v)] || String(v);
-  if (field === "kind")
-    return v === "fixed" ? "Fixa" : v === "variable" ? "Variável" : String(v);
+  if (fieldValueLabels[field]) return valueLabel(field, v);
   if (
     [
       "total",

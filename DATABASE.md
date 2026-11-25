@@ -72,6 +72,8 @@ Regras da rota do dia:
 
 `Custo estimado do trecho = km informados × custo/km + estacionamento + pedágio`. O valor cobrado da cliente é independente. Provisões anuais e trechos estimados não criam despesas e não são deduzidos novamente do resultado. Despesas reais devem ser lançadas uma única vez. O custo/km e os trechos servem ao orçamento e ao roteiro, com fonte manual identificada.
 
+`Organization.settings.travelFeeTable` guarda a tabela de deslocamento: `[{ upToKm, ethanol, gasoline }]`, até 30 faixas, sem duas com a mesma distância. `Deslocamento sugerido` = valor da menor faixa com `upToKm ≥ distância de ida × 2`, na coluna do combustível do carro (etanol sem carro); acima da última faixa ou sem tabela, não há sugestão (`travelFeeFromTable`). O custo do trajeto (`distância de ida × 2 × custo/km`, `travelFeeFor`) é mostrado só para comparação. O valor cobrado continua sendo o informado em `travelFee`. `Duração sugerida = Σ(duração do serviço × quantidade) + minutos de ida`. Nenhuma coluna nova.
+
 ## Migração histórica
 
 A prévia mantém abas, linhas, colunas, fórmulas e resultados disponíveis. Não avalia fórmulas arbitrárias. Campos desconhecidos permanecem no JSON original. Cada linha exige revisão. Nomes exatamente normalizados podem ser consolidados quando a usuária confirma a identidade; homônimos ou telefones conflitantes exigem ID explícito. Horário, data, valor e serviço precisam ser corrigidos quando ausentes. Registros comerciais de outros negócios precisam de classificação antes de gravação.

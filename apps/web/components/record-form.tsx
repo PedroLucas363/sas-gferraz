@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,10 +18,20 @@ import {
   addressDataOf,
   formatAddress,
 } from "@gferraz/shared";
-import { api, allRows, brl, today } from "./api";
+import { api, allRows, brl, today, day } from "./api";
 import { Dialog } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { AddressFields } from "./address-fields";
+import { SearchSelect, searchKey } from "./ui/search-select";
+import {
+  DurationInput,
+  nonNegative,
+  blockSigns,
+  toHhmm,
+  useDebounced,
+} from "./ui/number";
+const byName = (a: { name: string }, b: { name: string }) =>
+  a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
 const errorLabels: Record<string, string> = {
   ...fieldLabels,
   clientId: "Cliente",
@@ -192,8 +202,8 @@ function Editor({
   const lookups = useQuery({
     queryKey: ["lookups"],
     queryFn: async () => ({
-      clients: await allRows("clients", [{ id: "name", desc: false }]),
-      services: await allRows("services"),
+      clients: (await allRows("clients")).sort(byName),
+      services: (await allRows("services")).sort(byName),
       appointments: await allRows("appointments"),
       events: await api("events"),
     }),
@@ -206,7 +216,230 @@ function Editor({
         name: item.serviceName + " (histórico)",
         price: item.unitPrice,
       });
+  serviceOptions.sort(byName);
+  const clientOptions = (lookups.data?.clients || []).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    hint: c.phone || undefined,
+  }));
+  function clientField(onPick?: (id: string) => void) {
+    return (
+      <SearchSelect
+        label="Cliente"
+        options={clientOptions}
+        value={watch.clientId || ""}
+        onChange={(id) => {
+          form.setValue("clientId", id, { shouldValidate: true });
+          onPick?.(id);
+        }}
+      />
+    );
+  }
   const watch = form.watch();
+  // Appointments of the chosen client that can still receive money, newest first.
+  const clientAppointments = [...(lookups.data?.appointments || [])]
+    .filter(
+      (a) =>
+        a.clientId === watch.clientId &&
+        !["cancelled", "quote", "no_show"].includes(a.status),
+    )
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  // Date and time are typed apart and joined into startsAt (São Paulo, UTC-3, no daylight saving).
+  const [when, setWhen] = useState(() => {
+    const local = record
+      ? new Date(new Date(record.startsAt).getTime() - 3 * 3600000)
+          .toISOString()
+          .slice(0, 16)
+      : today() + "T10:00";
+    return { date: local.slice(0, 10), time: local.slice(11, 16) };
+  });
+  useEffect(() => {
+    if (entity === "appointments" && when.date && when.time)
+      form.setValue("startsAt", `${when.date}T${when.time}:00-03:00`);
+  }, [entity, form, when]);
+  // Fields the user typed into stop following the automatic suggestions.
+  const [touched, setTouched] = useState({
+    title: !!record,
+    duration: !!record,
+    travelFee: !!record,
+  });
+  // The balance due date follows the appointment date unless it was set to another day.
+  function changeDate(next: string) {
+    const due = form.getValues("dueDate");
+    if (!due || due === when.date)
+      form.setValue("dueDate", next, { shouldValidate: true });
+    setWhen({ ...when, date: next });
+  }
+  // Live figures from the server (finance rules stay there), asked after a pause in typing.
+  const quoteInput = useDebounced(
+    entity === "appointments"
+      ? {
+          address: formatAddress(address),
+          items: (watch.items || []).map((i: any) => ({
+            serviceId: i.serviceId || "",
+            quantity: Number(i.quantity) || 1,
+            unitPrice: String(i.unitPrice ?? "0"),
+          })),
+          discount: String(watch.discount ?? "0"),
+          extra: String(watch.extra ?? "0"),
+          travelFee: String(watch.travelFee ?? "0"),
+        }
+      : null,
+    350,
+  );
+  const quoteQuery = useQuery({
+    queryKey: ["quote", quoteInput],
+    queryFn: () =>
+      api("agenda/quote", { method: "POST", body: JSON.stringify(quoteInput) }),
+    enabled: !!quoteInput,
+    placeholderData: (prev) => prev,
+  });
+  const quote = quoteQuery.data as
+    | {
+        origin: string;
+        travel: { minutes: number; distanceKm: string } | null;
+        vehicle: { name: string; costPerKm: string } | null;
+        suggestedTravelFee: string | null;
+        travelCost: string | null;
+        tableRows: number;
+        tableMaxKm: number | null;
+        roundTripKm: string | null;
+        travelRange: { upToKm: number; fuel: "ethanol" | "gasoline" } | null;
+        serviceMinutes: number;
+        suggestedDuration: number;
+        servicesTotal: string;
+        total: string;
+      }
+    | undefined;
+  useEffect(() => {
+    if (!quote) return;
+    if (!touched.duration && quote.suggestedDuration >= 5)
+      form.setValue("duration", quote.suggestedDuration, {
+        shouldValidate: true,
+      });
+    if (!touched.travelFee && quote.suggestedTravelFee)
+      form.setValue("travelFee", quote.suggestedTravelFee, {
+        shouldValidate: true,
+      });
+  }, [quote, touched, form]);
+  // A new appointment is named after its services until the user types a name.
+  const serviceNames = (watch.items || [])
+    .map((i: any) => serviceOptions.find((s) => s.id === i.serviceId)?.name)
+    .filter(Boolean)
+    .join(" + ");
+  useEffect(() => {
+    if (entity === "appointments" && !touched.title && serviceNames)
+      form.setValue("title", serviceNames.slice(0, 160), {
+        shouldValidate: true,
+      });
+  }, [entity, serviceNames, touched.title, form]);
+  const [leg, setLeg] = useState({ minutes: "", distanceKm: "" });
+  async function saveLeg() {
+    setError("");
+    try {
+      await api("agenda/legs", {
+        method: "PUT",
+        body: JSON.stringify({
+          origin: quote?.origin,
+          destination: formatAddress(address),
+          minutes: Number(leg.minutes),
+          distanceKm: leg.distanceKm.replace(",", "."),
+        }),
+      });
+      setLeg({ minutes: "", distanceKm: "" });
+      await quoteQuery.refetch();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  const km = (v: string | null) => (v ?? "").replace(".", ",");
+  function travelInfo() {
+    if (!quote) return <p className="muted">Calculando…</p>;
+    if (!quote.origin)
+      return (
+        <p className="muted">
+          Cadastre o endereço de partida em Configurações para calcular o
+          deslocamento.
+        </p>
+      );
+    if (!formatAddress(address))
+      return (
+        <p className="muted">
+          Informe o endereço do atendimento para calcular o deslocamento.
+        </p>
+      );
+    if (!quote.travel)
+      return (
+        <div className="travel-missing">
+          <p className="muted">
+            Ainda não há tempo e distância de casa até este endereço. Informe
+            uma vez; fica guardado para os próximos atendimentos aqui.
+          </p>
+          <div className="form-row">
+            <label>
+              Tempo de ida (min)
+              <input
+                type="number"
+                inputMode="numeric"
+                max="1440"
+                {...nonNegative}
+                value={leg.minutes}
+                onChange={(e) => setLeg({ ...leg, minutes: e.target.value })}
+              />
+            </label>
+            <label>
+              Distância de ida (km)
+              <input
+                inputMode="decimal"
+                value={leg.distanceKm}
+                onKeyDown={blockSigns}
+                onChange={(e) => setLeg({ ...leg, distanceKm: e.target.value })}
+              />
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!leg.minutes || !leg.distanceKm}
+              onClick={saveLeg}
+            >
+              Guardar trajeto
+            </Button>
+          </div>
+        </div>
+      );
+    return (
+      <div className="muted travel-lines">
+        <p>
+          De casa até aqui: {toHhmm(quote.travel.minutes)} e{" "}
+          {km(quote.travel.distanceKm)} km (só ida); ida e volta{" "}
+          {km(quote.roundTripKm)} km.
+        </p>
+        <p>
+          {quote.travelRange
+            ? `Tabela: faixa até ${quote.travelRange.upToKm} km, ${
+                quote.travelRange.fuel === "gasoline" ? "gasolina" : "etanol"
+              }: ${brl(quote.suggestedTravelFee)}.`
+            : quote.tableRows
+              ? `Ida e volta passa da última faixa da tabela (até ${quote.tableMaxKm} km): informe o valor.`
+              : "Cadastre a tabela de deslocamento em Configurações para sugerir o valor."}
+        </p>
+        {quote.travelCost && quote.vehicle && (
+          <p>
+            Custo estimado do {quote.vehicle.name}: {brl(quote.travelCost)} (
+            {brl(quote.vehicle.costPerKm)}/km).
+          </p>
+        )}
+      </div>
+    );
+  }
+  const [eventName, setEventName] = useState("");
+  // Same rule as the server: case, accents and spacing do not make a new name.
+  const nameKey = (v: string) => searchKey(v).replace(/\s+/g, " ");
+  const eventTwin: { id: string; name: string } | undefined = eventName.trim()
+    ? (lookups.data?.events || []).find(
+        (e: { name: string }) => nameKey(e.name) === nameKey(eventName),
+      )
+    : undefined;
   function applyAddress(next: AddressData) {
     setAddress(next);
     form.setValue("addressData", next);
@@ -221,34 +454,47 @@ function Editor({
       setError((e as Error).message);
     }
   }
+  // "R$" sits inside the box so money fields line up with their neighbours.
+  const money = (input: ReactNode) => (
+    <span className="money-input">
+      <span aria-hidden="true">R$</span>
+      {input}
+    </span>
+  );
   function field(
     key: string,
     label: string,
     type = "text",
     opts?: { money?: boolean; required?: boolean },
   ) {
+    const input = (
+      <input
+        aria-label={label}
+        type={type}
+        step={opts?.money ? "0.01" : key === "kmPerLiter" ? "0.001" : undefined}
+        {...(type === "number" ? nonNegative : {})}
+        {...form.register(key, {
+          valueAsNumber: ["year", "annualKm"].includes(key),
+          setValueAs: type === "date" ? (v) => v || null : undefined,
+        })}
+        required={opts?.required}
+      />
+    );
     return (
       <label key={key}>
         {label}
-        {opts?.money && <small>R$</small>}
-        <input
-          aria-label={label}
-          type={type}
-          step={
-            opts?.money ? "0.01" : key === "kmPerLiter" ? "0.001" : undefined
-          }
-          {...form.register(key, {
-            valueAsNumber: ["duration", "year", "annualKm"].includes(key),
-            setValueAs:
-              key === "actualDuration"
-                ? (v) => (v === "" || v === null ? null : Number(v))
-                : type === "date"
-                  ? (v) => v || null
-                  : undefined,
-          })}
-          required={opts?.required}
-        />
+        {opts?.money ? money(input) : input}
       </label>
+    );
+  }
+  function duration(key: string, label: string, nullable = false) {
+    return (
+      <DurationInput
+        key={key}
+        label={label}
+        value={watch[key]}
+        onChange={(m) => form.setValue(key, m === null && !nullable ? 0 : m)}
+      />
     );
   }
   function select(
@@ -341,7 +587,7 @@ function Editor({
             {field("name", "Nome do serviço", "text", { required: true })}
             {field("category", "Categoria", "text", { required: true })}
             {field("price", "Preço de referência", "number", { money: true })}
-            {field("duration", "Duração prevista (min)", "number")}
+            {duration("duration", "Duração prevista (horas:minutos)")}
           </div>
           <label>
             Descrição
@@ -351,38 +597,45 @@ function Editor({
       )}
       {entity === "appointments" && (
         <>
-          {select(
-            "clientId",
-            "Cliente",
-            lookups.data?.clients || [],
-            false,
+          {
             // A new appointment starts at the client's own address.
-            (id) => !formatAddress(address) && copyClientAddress(id),
-          )}
+            clientField(
+              (id) => !formatAddress(address) && copyClientAddress(id),
+            )
+          }
           <div className="form-grid">
-            {field("title", "Nome do atendimento", "text", { required: true })}
             <label>
-              Data e horário (São Paulo)
+              Nome do atendimento
               <input
-                type="datetime-local"
-                defaultValue={
-                  record
-                    ? new Date(
-                        new Date(record.startsAt).getTime() - 3 * 3600000,
-                      )
-                        .toISOString()
-                        .slice(0, 16)
-                    : today() + "T10:00"
-                }
-                onChange={(e) =>
-                  form.setValue("startsAt", e.target.value + ":00-03:00")
-                }
+                aria-label="Nome do atendimento"
+                required
+                {...form.register("title", {
+                  onChange: () => setTouched((t) => ({ ...t, title: true })),
+                })}
               />
             </label>
-            {field("duration", "Duração prevista (min)", "number")}
-            {field("actualDuration", "Duração realizada (min)", "number")}
             {select("status", "Situação", Object.entries(statusLabels))}
-            {field("dueDate", "Vencimento do saldo", "date")}
+            <label>
+              Data
+              <input
+                type="date"
+                aria-label="Data"
+                required
+                value={when.date}
+                onChange={(e) => changeDate(e.target.value)}
+              />
+            </label>
+            <label>
+              Horário
+              <input
+                type="time"
+                aria-label="Horário"
+                required
+                step={60}
+                value={when.time}
+                onChange={(e) => setWhen({ ...when, time: e.target.value })}
+              />
+            </label>
           </div>
           <AddressFields
             legend="Endereço do atendimento"
@@ -408,24 +661,24 @@ function Editor({
             <summary>Criar um evento</summary>
             <div className="form-row">
               <input
-                id="event-name"
                 aria-label="Nome do evento"
                 placeholder="Nome do evento"
+                value={eventName}
+                onChange={(e) => setEventName(e.target.value)}
               />
               <Button
                 type="button"
                 variant="outline"
+                disabled={!!eventTwin || eventName.trim().length < 2}
                 onClick={async () => {
                   try {
-                    const name = (
-                      document.getElementById("event-name") as HTMLInputElement
-                    ).value;
                     const e = await api("events", {
                       method: "POST",
-                      body: JSON.stringify({ name }),
+                      body: JSON.stringify({ name: eventName }),
                     });
-                    form.setValue("eventId", e.id);
                     await cache.invalidateQueries({ queryKey: ["lookups"] });
+                    form.setValue("eventId", e.id);
+                    setEventName("");
                   } catch (e) {
                     setError((e as Error).message);
                   }
@@ -434,58 +687,83 @@ function Editor({
                 Criar e vincular
               </Button>
             </div>
-          </details>
-          <h3>Serviços contratados</h3>
-          {items.fields.map((f, i) => (
-            <div className="item-row" key={f.id}>
-              <label>
-                Serviço
-                <select
-                  aria-label="Serviço"
-                  {...form.register(`items.${i}.serviceId`)}
-                  onChange={(e) => {
-                    form.setValue(`items.${i}.serviceId`, e.target.value);
-                    const s = serviceOptions.find(
-                      (s) => s.id === e.target.value,
-                    );
-                    if (s) form.setValue(`items.${i}.unitPrice`, s.price);
+            {eventTwin && (
+              <p role="alert" className="error">
+                Já existe o evento “{eventTwin.name}”.{" "}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    form.setValue("eventId", eventTwin.id);
+                    setEventName("");
                   }}
                 >
-                  <option value="">Selecione</option>
-                  {serviceOptions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Quantidade
-                <input
-                  type="number"
-                  min="1"
-                  {...form.register(`items.${i}.quantity`, {
-                    valueAsNumber: true,
-                  })}
+                  Vincular a ele
+                </Button>
+              </p>
+            )}
+          </details>
+          <h3>Serviços contratados</h3>
+          {items.fields.map((f, i) => {
+            return (
+              <div className="item-row" key={f.id}>
+                <SearchSelect
+                  label="Serviço"
+                  options={serviceOptions.map((s) => ({
+                    id: s.id,
+                    name: s.name,
+                    hint: [
+                      s.price ? brl(s.price) : "",
+                      s.duration ? toHhmm(s.duration) : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                  }))}
+                  value={watch.items?.[i]?.serviceId || ""}
+                  onChange={(id) => {
+                    form.setValue(`items.${i}.serviceId`, id, {
+                      shouldValidate: true,
+                    });
+                    const s = serviceOptions.find((s) => s.id === id);
+                    if (s) form.setValue(`items.${i}.unitPrice`, s.price);
+                  }}
                 />
-              </label>
-              <label>
-                Valor unitário (R$)
-                <input
-                  type="number"
-                  step="0.01"
-                  {...form.register(`items.${i}.unitPrice`)}
-                />
-              </label>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => items.remove(i)}
-              >
-                Remover
-              </Button>
-            </div>
-          ))}
+                <label>
+                  Quantidade
+                  <input
+                    type="number"
+                    min="1"
+                    onKeyDown={blockSigns}
+                    aria-label="Quantidade"
+                    {...form.register(`items.${i}.quantity`, {
+                      valueAsNumber: true,
+                    })}
+                  />
+                </label>
+                <label>
+                  Valor unitário
+                  {money(
+                    <input
+                      type="number"
+                      step="0.01"
+                      {...nonNegative}
+                      aria-label="Valor unitário"
+                      {...form.register(`items.${i}.unitPrice`)}
+                    />,
+                  )}
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={items.fields.length === 1}
+                  onClick={() => items.remove(i)}
+                >
+                  Remover
+                </Button>
+              </div>
+            );
+          })}
           <Button
             type="button"
             variant="outline"
@@ -495,22 +773,103 @@ function Editor({
           >
             Adicionar serviço
           </Button>
+          <section className="travel-box" aria-label="Deslocamento">
+            <h3>Deslocamento</h3>
+            {travelInfo()}
+            <div className="form-grid">
+              <label>
+                Deslocamento cobrado
+                {money(
+                  <input
+                    type="number"
+                    step="0.01"
+                    aria-label="Deslocamento cobrado"
+                    {...nonNegative}
+                    {...form.register("travelFee", {
+                      onChange: () =>
+                        setTouched((t) => ({ ...t, travelFee: true })),
+                    })}
+                  />,
+                )}
+                {quote?.suggestedTravelFee &&
+                  quote.suggestedTravelFee !== String(watch.travelFee) && (
+                    <small>
+                      Sugerido: {brl(quote.suggestedTravelFee)}{" "}
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() =>
+                          form.setValue("travelFee", quote.suggestedTravelFee, {
+                            shouldValidate: true,
+                          })
+                        }
+                      >
+                        usar
+                      </button>
+                    </small>
+                  )}
+              </label>
+              {field("discount", "Desconto", "number", { money: true })}
+              {field("extra", "Adicionais", "number", { money: true })}
+            </div>
+          </section>
           <div className="form-grid">
-            {field("discount", "Desconto", "number", { money: true })}
-            {field("extra", "Adicionais", "number", { money: true })}
-            {field("travelFee", "Deslocamento cobrado", "number", {
-              money: true,
-            })}
+            <DurationInput
+              label="Duração prevista (horas:minutos)"
+              value={watch.duration}
+              onChange={(m) => {
+                setTouched((t) => ({ ...t, duration: true }));
+                form.setValue("duration", m ?? 0);
+              }}
+              hint={
+                quote && quote.suggestedDuration > 0
+                  ? `Serviços ${toHhmm(quote.serviceMinutes)}` +
+                    (quote.travel
+                      ? ` + ida ${toHhmm(quote.travel.minutes)}`
+                      : "") +
+                    ` = ${toHhmm(quote.suggestedDuration)}`
+                  : undefined
+              }
+              action={
+                quote &&
+                quote.suggestedDuration > 0 &&
+                quote.suggestedDuration !== watch.duration
+                  ? {
+                      label: "usar",
+                      onClick: () =>
+                        form.setValue("duration", quote.suggestedDuration, {
+                          shouldValidate: true,
+                        }),
+                    }
+                  : undefined
+              }
+            />
+            {duration(
+              "actualDuration",
+              "Duração realizada (horas:minutos)",
+              true,
+            )}
+            {field("dueDate", "Vencimento do saldo", "date")}
           </div>
-          <p className="muted">
-            O valor final e o saldo serão calculados pelo servidor ao salvar. O
-            preço do atendimento é independente do catálogo.
-          </p>
+          <div className="appointment-total" aria-live="polite">
+            <div>
+              <span>Serviços</span>
+              <strong>{quote ? brl(quote.servicesTotal) : "—"}</strong>
+            </div>
+            <div>
+              <span>Total do atendimento</span>
+              <strong>{quote ? brl(quote.total) : "—"}</strong>
+            </div>
+            <small>
+              Serviços − desconto + adicionais + deslocamento. O saldo é
+              atualizado pelos recebimentos.
+            </small>
+          </div>
         </>
       )}
       {entity === "payments" && (
         <>
-          {select("clientId", "Cliente", lookups.data?.clients || [])}
+          {clientField()}
           <div className="form-grid">
             {field("receivedAt", "Data efetiva do recebimento", "date")}
             {select(
@@ -527,33 +886,43 @@ function Editor({
           <h3>Distribuição entre atendimentos</h3>
           {allocations.fields.map((f, i) => (
             <div className="item-row" key={f.id}>
+              <SearchSelect
+                label="Atendimento"
+                placeholder={
+                  watch.clientId
+                    ? "Digite para buscar"
+                    : "Escolha a cliente primeiro"
+                }
+                options={clientAppointments.map((a) => ({
+                  id: a.id,
+                  name: `${a.title} · ${day(a.date)}`,
+                  hint: `saldo ${brl(a.pending)}`,
+                }))}
+                value={watch.allocations?.[i]?.appointmentId || ""}
+                onChange={(id) => {
+                  form.setValue(`allocations.${i}.appointmentId`, id, {
+                    shouldValidate: true,
+                  });
+                  // An empty amount starts at what is still owed on that appointment.
+                  const a = clientAppointments.find((a) => a.id === id);
+                  const current = Number(watch.allocations?.[i]?.amount || 0);
+                  if (a && !current && Number(a.pending) > 0)
+                    form.setValue(`allocations.${i}.amount`, a.pending, {
+                      shouldValidate: true,
+                    });
+                }}
+              />
               <label>
-                Atendimento
-                <select
-                  aria-label="Atendimento"
-                  {...form.register(`allocations.${i}.appointmentId`)}
-                >
-                  <option value="">Selecione</option>
-                  {lookups.data?.appointments
-                    .filter(
-                      (a) =>
-                        a.clientId === watch.clientId &&
-                        !["cancelled", "quote", "no_show"].includes(a.status),
-                    )
-                    .map((a) => (
-                      <option value={a.id} key={a.id}>
-                        {a.title} · {a.date} · saldo {brl(a.pending)}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                Valor recebido (R$)
-                <input
-                  type="number"
-                  step="0.01"
-                  {...form.register(`allocations.${i}.amount`)}
-                />
+                Valor recebido
+                {money(
+                  <input
+                    type="number"
+                    step="0.01"
+                    {...nonNegative}
+                    aria-label="Valor recebido"
+                    {...form.register(`allocations.${i}.amount`)}
+                  />,
+                )}
               </label>
               <Button
                 type="button"
@@ -592,10 +961,12 @@ function Editor({
           {select(
             "appointmentId",
             "Vincular ao atendimento (opcional)",
-            (lookups.data?.appointments || []).map((a) => ({
-              id: a.id,
-              name: a.title + " · " + a.clientName,
-            })),
+            (lookups.data?.appointments || [])
+              .map((a) => ({
+                id: a.id,
+                name: a.clientName + " · " + a.title + " · " + day(a.date),
+              }))
+              .sort(byName),
             true,
           )}
         </>

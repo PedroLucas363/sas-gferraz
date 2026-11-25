@@ -5,6 +5,7 @@ import {
   appointmentTotal,
   allocatedPaid,
   vehicleCost,
+  travelFeeFromTable,
 } from "../apps/api/src/finance";
 import { selectRows } from "../apps/api/src/query";
 import { querySchema } from "../packages/shared/src";
@@ -88,6 +89,51 @@ test("consultas combinam período e E/OU e não aceitam campos arbitrários", ()
       "appointments",
     ),
   );
+});
+test("situação e tipo filtram pelo código ou pela palavra mostrada na tela", () => {
+  const rows = [
+    { id: "1", date: "2026-10-01", status: "confirmed", clientName: "Ana" },
+    { id: "2", date: "2026-10-02", status: "completed", clientName: "Bia" },
+    { id: "3", date: "2026-10-03", status: "cancelled", clientName: "Cris" },
+  ];
+  const ids = (filters: unknown[], search?: string) =>
+    selectRows(
+      rows,
+      querySchema.parse({ filters, search }),
+      "appointments",
+    ).map((r) => r.id);
+  assert.deepEqual(ids([{ field: "status", op: "eq", value: "Confirmado" }]), [
+    "1",
+  ]);
+  assert.deepEqual(ids([{ field: "status", op: "eq", value: "confirmed" }]), [
+    "1",
+  ]);
+  assert.deepEqual(
+    ids([{ field: "status", op: "contains", value: "conclu" }]),
+    ["2"],
+  );
+  assert.deepEqual(ids([{ field: "status", op: "ne", value: "Cancelado" }]), [
+    "1",
+    "2",
+  ]);
+  assert.deepEqual(ids([], "cancelado"), ["3"]);
+});
+test("deslocamento pela tabela: faixa de ida e volta e coluna do combustível", () => {
+  const table = [
+    { upToKm: 30, ethanol: "30", gasoline: "35" },
+    { upToKm: 20, ethanol: "20", gasoline: "25" },
+    { upToKm: 50, ethanol: "55", gasoline: "60" },
+  ];
+  const fee = (km: string, fuel: string) => {
+    const r = travelFeeFromTable(km, table, fuel);
+    return r && [r.upToKm, r.fuel, r.amount.toFixed(2)];
+  };
+  assert.deepEqual(fee("20", "Etanol"), [20, "ethanol", "20.00"]);
+  assert.deepEqual(fee("20.01", "Etanol"), [30, "ethanol", "30.00"]);
+  assert.deepEqual(fee("25", "GASOLINA"), [30, "gasoline", "35.00"]);
+  assert.deepEqual(fee("12", ""), [20, "ethanol", "20.00"]);
+  assert.equal(fee("50.5", "Etanol"), null);
+  assert.equal(travelFeeFromTable("10", [], "Etanol"), null);
 });
 test("datas brasileiras inválidas e valores ausentes não viram registros fictícios", () => {
   assert.equal(parseDate("15/11/0202"), null);

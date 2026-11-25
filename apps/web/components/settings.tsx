@@ -6,6 +6,8 @@ import { api } from "./api";
 import { Button } from "./ui/button";
 import { AddressFields } from "./address-fields";
 import { History } from "./history";
+import { nonNegative } from "./ui/number";
+import type { TravelFeeRow } from "@gferraz/shared";
 export function Settings() {
   const settings = useQuery({
     queryKey: ["settings"],
@@ -92,7 +94,7 @@ function SettingsForm({ data }: { data: any }) {
             Margem de segurança entre atendimentos (min)
             <input
               type="number"
-              min="0"
+              {...nonNegative}
               max="240"
               value={form.settings.bufferMinutes}
               onChange={(e) =>
@@ -119,6 +121,12 @@ function SettingsForm({ data }: { data: any }) {
                 originAddress: formatAddress(next),
               },
             })
+          }
+        />
+        <TravelTable
+          rows={form.settings.travelFeeTable}
+          onChange={(travelFeeTable) =>
+            setForm({ ...form, settings: { ...form.settings, travelFeeTable } })
           }
         />
         <h3>Indicadores no dashboard</h3>
@@ -205,5 +213,107 @@ function SettingsForm({ data }: { data: any }) {
         <History filter />
       </section>
     </>
+  );
+}
+/** Price list for travel: one row per round-trip distance range, one price per fuel. */
+function TravelTable({
+  rows,
+  onChange,
+}: {
+  rows: TravelFeeRow[];
+  onChange: (rows: TravelFeeRow[]) => void;
+}) {
+  const set = (i: number, patch: Partial<TravelFeeRow>) =>
+    onChange(rows.map((r, j) => (i === j ? { ...r, ...patch } : r)));
+  const sorted = [...rows].sort((a, b) => a.upToKm - b.upToKm);
+  return (
+    <fieldset className="travel-table">
+      <legend>Tabela de deslocamento</legend>
+      <p className="muted">
+        Valor cobrado pela distância de ida e volta. Cada faixa vai do fim da
+        anterior até o limite informado. O atendimento sugere o valor da coluna
+        do combustível do carro cadastrado (etanol, se não houver carro).
+      </p>
+      {rows.length > 0 && (
+        <div className="travel-table-rows">
+          {rows.map((r, i) => {
+            const prev = sorted[sorted.indexOf(r) - 1];
+            return (
+              <div className="item-row" key={i}>
+                <label>
+                  Até km (ida e volta)
+                  <input
+                    type="number"
+                    step="1"
+                    {...nonNegative}
+                    value={r.upToKm || ""}
+                    onChange={(e) =>
+                      set(i, { upToKm: Math.trunc(Number(e.target.value)) })
+                    }
+                  />
+                  <small>
+                    {r.upToKm
+                      ? prev
+                        ? `de ${prev.upToKm + 1} a ${r.upToKm} km`
+                        : `até ${r.upToKm} km`
+                      : ""}
+                  </small>
+                </label>
+                <label>
+                  Etanol
+                  <span className="money-input">
+                    <span aria-hidden="true">R$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      {...nonNegative}
+                      value={r.ethanol}
+                      onChange={(e) => set(i, { ethanol: e.target.value })}
+                    />
+                  </span>
+                </label>
+                <label>
+                  Gasolina
+                  <span className="money-input">
+                    <span aria-hidden="true">R$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      {...nonNegative}
+                      value={r.gasoline}
+                      onChange={(e) => set(i, { gasoline: e.target.value })}
+                    />
+                  </span>
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => onChange(rows.filter((_, j) => j !== i))}
+                >
+                  Remover
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          const last = sorted.at(-1);
+          onChange([
+            ...rows,
+            {
+              upToKm: last ? last.upToKm + 10 : 20,
+              ethanol: last?.ethanol ?? "0",
+              gasoline: last?.gasoline ?? "0",
+            },
+          ]);
+        }}
+      >
+        Adicionar faixa
+      </Button>
+    </fieldset>
   );
 }
