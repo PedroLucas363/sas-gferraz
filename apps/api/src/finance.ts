@@ -48,6 +48,28 @@ export function vehicleCost(v: any) {
 export function travelFeeFor(oneWayKm: string, vehicle: any) {
   return D(oneWayKm).mul(2).mul(vehicleCost(vehicle)).toDecimalPlaces(2);
 }
+/**
+ * Price charged for a round trip of `roundTripKm`, from the user's price list: the first range
+ * (smallest "up to") that covers the distance, in the column of the vehicle's fuel. Null when the
+ * list is empty or the distance is beyond its last range.
+ */
+export function travelFeeFromTable(
+  roundTripKm: string,
+  table: { upToKm: number; ethanol: string; gasoline: string }[],
+  fuel: string,
+) {
+  const row = [...table]
+    .sort((a, b) => a.upToKm - b.upToKm)
+    .find((r) => D(roundTripKm).lte(r.upToKm));
+  if (!row) return null;
+  return {
+    upToKm: row.upToKm,
+    fuel: isGasoline(fuel) ? "gasoline" : "ethanol",
+    amount: D(isGasoline(fuel) ? row.gasoline : row.ethanol).toDecimalPlaces(2),
+  };
+}
+const isGasoline = (fuel: string) =>
+  fuel.normalize("NFD").toLowerCase().includes("gasolina");
 export function localDate(v: Date) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",

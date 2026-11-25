@@ -732,7 +732,9 @@ test("prévia do atendimento: total, deslocamento sugerido e duração sugerida"
   q = await quote(body);
   assert.deepEqual(q.travel, { minutes: 25, distanceKm: "12.50" });
   assert.equal(q.suggestedDuration, 190);
-  assert.equal(q.suggestedTravelFee, null, "sem veículo não há valor sugerido");
+  assert.equal(q.roundTripKm, "25.00");
+  assert.equal(q.suggestedTravelFee, null, "sem tabela não há valor sugerido");
+  assert.equal(q.travelCost, null, "sem veículo não há custo");
   await create(
     "records/vehicles",
     {
@@ -755,7 +757,52 @@ test("prévia do atendimento: total, deslocamento sugerido e duração sugerida"
   // 0.50/km of fuel + 1000/10000 fixed = 0.60/km; 25 km round trip = 15.00.
   q = await quote(body);
   assert.equal(q.vehicle.costPerKm, "0.6000");
-  assert.equal(q.suggestedTravelFee, "15.00");
+  assert.equal(q.travelCost, "15.00");
+  assert.equal(q.suggestedTravelFee, null);
+  // The price list decides: 25 km round trip falls in "up to 30", ethanol column.
+  const table = [
+    { upToKm: 20, ethanol: "20.00", gasoline: "25.00" },
+    { upToKm: 30, ethanol: "30.00", gasoline: "35.00" },
+  ];
+  const cur = (await req("settings", "GET", undefined, cookie)).data;
+  const saved = await req(
+    "settings",
+    "PATCH",
+    { name: cur.name, settings: { ...cur.settings, travelFeeTable: table } },
+    cookie,
+  );
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  q = await quote(body);
+  assert.deepEqual(q.travelRange, { upToKm: 30, fuel: "ethanol" });
+  assert.equal(q.suggestedTravelFee, "30.00");
+  assert.equal(q.tableMaxKm, 30);
+  // Beyond the last range there is no suggestion.
+  await req(
+    "agenda/legs",
+    "PUT",
+    { origin, destination, minutes: 40, distanceKm: "16" },
+    cookie,
+  );
+  q = await quote(body);
+  assert.equal(q.suggestedTravelFee, null);
+  assert.equal(
+    (
+      await req(
+        "settings",
+        "PATCH",
+        {
+          name: cur.name,
+          settings: {
+            ...cur.settings,
+            travelFeeTable: [table[0], { ...table[1], upToKm: 20 }],
+          },
+        },
+        cookie,
+      )
+    ).status,
+    400,
+    "faixas com a mesma distância são recusadas",
+  );
   // Half-typed values do not break the preview.
   q = await quote({
     address: "",

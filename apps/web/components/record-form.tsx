@@ -292,6 +292,11 @@ function Editor({
         travel: { minutes: number; distanceKm: string } | null;
         vehicle: { name: string; costPerKm: string } | null;
         suggestedTravelFee: string | null;
+        travelCost: string | null;
+        tableRows: number;
+        tableMaxKm: number | null;
+        roundTripKm: string | null;
+        travelRange: { upToKm: number; fuel: "ethanol" | "gasoline" } | null;
         serviceMinutes: number;
         suggestedDuration: number;
         servicesTotal: string;
@@ -339,6 +344,7 @@ function Editor({
       setError((e as Error).message);
     }
   }
+  const km = (v: string | null) => (v ?? "").replace(".", ",");
   function travelInfo() {
     if (!quote) return <p className="muted">Calculando…</p>;
     if (!quote.origin)
@@ -394,13 +400,28 @@ function Editor({
         </div>
       );
     return (
-      <p className="muted">
-        De casa até aqui: {toHhmm(quote.travel.minutes)} e{" "}
-        {quote.travel.distanceKm.replace(".", ",")} km (só ida).{" "}
-        {quote.vehicle
-          ? `Ida e volta pelo custo do ${quote.vehicle.name} (${brl(quote.vehicle.costPerKm)}/km): ${brl(quote.suggestedTravelFee)}.`
-          : "Cadastre o carro em Veículos para sugerir o valor do deslocamento."}
-      </p>
+      <div className="muted travel-lines">
+        <p>
+          De casa até aqui: {toHhmm(quote.travel.minutes)} e{" "}
+          {km(quote.travel.distanceKm)} km (só ida); ida e volta{" "}
+          {km(quote.roundTripKm)} km.
+        </p>
+        <p>
+          {quote.travelRange
+            ? `Tabela: faixa até ${quote.travelRange.upToKm} km, ${
+                quote.travelRange.fuel === "gasoline" ? "gasolina" : "etanol"
+              }: ${brl(quote.suggestedTravelFee)}.`
+            : quote.tableRows
+              ? `Ida e volta passa da última faixa da tabela (até ${quote.tableMaxKm} km): informe o valor.`
+              : "Cadastre a tabela de deslocamento em Configurações para sugerir o valor."}
+        </p>
+        {quote.travelCost && quote.vehicle && (
+          <p>
+            Custo estimado do {quote.vehicle.name}: {brl(quote.travelCost)} (
+            {brl(quote.vehicle.costPerKm)}/km).
+          </p>
+        )}
+      </div>
     );
   }
   const [eventName, setEventName] = useState("");

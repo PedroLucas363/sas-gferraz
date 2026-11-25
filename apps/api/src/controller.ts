@@ -37,6 +37,7 @@ import {
   vehicleSchema,
   addressDataSchema,
   defaultSettings,
+  travelFeeTableSchema,
 } from "@gferraz/shared";
 import { db, Context, owned, atomic, expectVersion, audit, plain } from "./db";
 import { DataService } from "./data.service";
@@ -458,6 +459,7 @@ export class AppController {
           originAddressData: addressDataSchema.optional(),
           bufferMinutes: z.number().int().min(0).max(240),
           dashboardIndicators: z.array(z.string()).max(20).optional(),
+          travelFeeTable: travelFeeTableSchema.optional(),
         }),
       })
       .parse(body);

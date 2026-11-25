@@ -81,6 +81,23 @@ export function addressDataOf(
     ? { ...emptyAddress, ...data }
     : { ...emptyAddress, street: legacy || "" };
 }
+/**
+ * Travel fee price list: each row covers round trips up to `upToKm` (after the previous row),
+ * with one price per fuel, like the "CARRO" sheet of the original spreadsheet.
+ */
+export const travelFeeRowSchema = z.object({
+  upToKm: z.number().int().min(1).max(10000),
+  ethanol: money,
+  gasoline: money,
+});
+export type TravelFeeRow = z.infer<typeof travelFeeRowSchema>;
+export const travelFeeTableSchema = z
+  .array(travelFeeRowSchema)
+  .max(30)
+  .refine(
+    (rows) => new Set(rows.map((r) => r.upToKm)).size === rows.length,
+    "Cada faixa precisa de uma distância diferente",
+  );
 export const defaultSettings = {
   beige: "#F9EAD2",
   green: "#546B57",
@@ -88,6 +105,7 @@ export const defaultSettings = {
   originAddressData: emptyAddress,
   bufferMinutes: 15,
   dashboardIndicators: [] as string[],
+  travelFeeTable: [] as TravelFeeRow[],
 };
 export const clientSchema = z.object({
   name: z.string().trim().min(2).max(160),

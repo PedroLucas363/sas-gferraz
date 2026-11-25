@@ -6,6 +6,7 @@ import {
   allocatedPaid,
   localDate,
   travelFeeFor,
+  travelFeeFromTable,
   vehicleCost,
 } from "./finance";
 import { appointmentInclude } from "./data.service";
@@ -137,8 +138,13 @@ export class RouteService {
     const org = await db.organization.findUniqueOrThrow({
       where: { id: c.organizationId },
     });
-    const origin = { ...defaultSettings, ...(org.settings as object) }
-      .originAddress as string;
+    const settings = { ...defaultSettings, ...(org.settings as object) };
+    const origin = settings.originAddress as string;
+    const table = settings.travelFeeTable as {
+      upToKm: number;
+      ethanol: string;
+      gasoline: string;
+    }[];
     const ids = input.items.map((i) => i.serviceId).filter(Boolean);
     const services = ids.length
       ? await db.service.findMany({
@@ -184,6 +190,13 @@ export class RouteService {
     const travel = leg
       ? { minutes: leg.minutes, distanceKm: leg.distanceKm.toFixed(2) }
       : null;
+    const range = travel
+      ? travelFeeFromTable(
+          D(travel.distanceKm).mul(2).toFixed(2),
+          table,
+          vehicle?.fuel ?? "",
+        )
+      : null;
     return {
       origin,
       address: input.address,
@@ -191,7 +204,13 @@ export class RouteService {
       vehicle: vehicle
         ? { name: vehicle.name, costPerKm: vehicleCost(vehicle).toFixed(4) }
         : null,
-      suggestedTravelFee:
+      // The price list decides what is charged; the vehicle cost is shown for comparison.
+      tableRows: table.length,
+      tableMaxKm: table.length ? Math.max(...table.map((r) => r.upToKm)) : null,
+      roundTripKm: travel ? D(travel.distanceKm).mul(2).toFixed(2) : null,
+      travelRange: range ? { upToKm: range.upToKm, fuel: range.fuel } : null,
+      suggestedTravelFee: range ? range.amount.toFixed(2) : null,
+      travelCost:
         travel && vehicle
           ? travelFeeFor(travel.distanceKm, vehicle).toFixed(2)
           : null,

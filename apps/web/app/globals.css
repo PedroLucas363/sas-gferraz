@@ -2023,3 +2023,34 @@ button.link {
     align-items: stretch;
   }
 }
+
+/* Travel price list in Settings. */
+.travel-table {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.travel-table p {
+  margin: 0;
+}
+.travel-table-rows {
+  display: grid;
+  gap: 10px;
+}
+@media (max-width: 760px) {
+  .travel-table .item-row {
+    flex-wrap: wrap;
+  }
+  .travel-table .item-row label {
+    flex: 1 1 40%;
+  }
+}
+.travel-lines {
+  display: grid;
+  gap: 4px;
+}
+.travel-lines p {
+  margin: 0;
+}
