@@ -74,9 +74,8 @@ test("cadastro, atendimento, pagamento parcial, indicador e visualização salva
     page.getByRole("heading", { name: "Atendimentos", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Novo registro" }).click();
-  await page
-    .getByLabel("Cliente", { exact: true })
-    .selectOption({ label: "Cliente Navegador" });
+  await page.getByLabel("Cliente", { exact: true }).fill("navega");
+  await page.getByRole("option", { name: /Cliente Navegador/ }).click();
   await page.getByLabel("Nome do atendimento").fill("Atendimento integração");
   await page
     .getByLabel("Serviço", { exact: true })
@@ -90,9 +89,8 @@ test("cadastro, atendimento, pagamento parcial, indicador e visualização salva
     page.getByRole("heading", { name: "Recebimentos", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Novo registro" }).click();
-  await page
-    .getByLabel("Cliente", { exact: true })
-    .selectOption({ label: "Cliente Navegador" });
+  await page.getByLabel("Cliente", { exact: true }).fill("navega");
+  await page.getByRole("option", { name: /Cliente Navegador/ }).click();
   await page
     .getByLabel("Atendimento", { exact: true })
     .selectOption({ index: 1 });

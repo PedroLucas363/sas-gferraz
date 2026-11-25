@@ -18,10 +18,13 @@ import {
   addressDataOf,
   formatAddress,
 } from "@gferraz/shared";
-import { api, allRows, brl, today } from "./api";
+import { api, allRows, brl, today, day } from "./api";
 import { Dialog } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { AddressFields } from "./address-fields";
+import { SearchSelect, searchKey } from "./ui/search-select";
+const byName = (a: { name: string }, b: { name: string }) =>
+  a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
 const errorLabels: Record<string, string> = {
   ...fieldLabels,
   clientId: "Cliente",
@@ -192,8 +195,8 @@ function Editor({
   const lookups = useQuery({
     queryKey: ["lookups"],
     queryFn: async () => ({
-      clients: await allRows("clients", [{ id: "name", desc: false }]),
-      services: await allRows("services"),
+      clients: (await allRows("clients")).sort(byName),
+      services: (await allRows("services")).sort(byName),
       appointments: await allRows("appointments"),
       events: await api("events"),
     }),
@@ -206,16 +209,29 @@ function Editor({
         name: item.serviceName + " (histórico)",
         price: item.unitPrice,
       });
+  serviceOptions.sort(byName);
+  const clientOptions = (lookups.data?.clients || []).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    hint: c.phone || undefined,
+  }));
+  function clientField(onPick?: (id: string) => void) {
+    return (
+      <SearchSelect
+        label="Cliente"
+        options={clientOptions}
+        value={watch.clientId || ""}
+        onChange={(id) => {
+          form.setValue("clientId", id, { shouldValidate: true });
+          onPick?.(id);
+        }}
+      />
+    );
+  }
   const watch = form.watch();
   const [eventName, setEventName] = useState("");
   // Same rule as the server: case, accents and spacing do not make a new name.
-  const nameKey = (v: string) =>
-    v
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
+  const nameKey = (v: string) => searchKey(v).replace(/\s+/g, " ");
   const eventTwin: { id: string; name: string } | undefined = eventName.trim()
     ? (lookups.data?.events || []).find(
         (e: { name: string }) => nameKey(e.name) === nameKey(eventName),
@@ -372,14 +388,12 @@ function Editor({
       )}
       {entity === "appointments" && (
         <>
-          {select(
-            "clientId",
-            "Cliente",
-            lookups.data?.clients || [],
-            false,
+          {
             // A new appointment starts at the client's own address.
-            (id) => !formatAddress(address) && copyClientAddress(id),
-          )}
+            clientField(
+              (id) => !formatAddress(address) && copyClientAddress(id),
+            )
+          }
           <div className="form-grid">
             {field("title", "Nome do atendimento", "text", { required: true })}
             <label>
@@ -549,7 +563,7 @@ function Editor({
       )}
       {entity === "payments" && (
         <>
-          {select("clientId", "Cliente", lookups.data?.clients || [])}
+          {clientField()}
           <div className="form-grid">
             {field("receivedAt", "Data efetiva do recebimento", "date")}
             {select(
@@ -573,7 +587,10 @@ function Editor({
                   {...form.register(`allocations.${i}.appointmentId`)}
                 >
                   <option value="">Selecione</option>
-                  {lookups.data?.appointments
+                  {[...(lookups.data?.appointments || [])]
+                    .sort((a, b) =>
+                      String(b.date).localeCompare(String(a.date)),
+                    )
                     .filter(
                       (a) =>
                         a.clientId === watch.clientId &&
@@ -633,10 +650,12 @@ function Editor({
           {select(
             "appointmentId",
             "Vincular ao atendimento (opcional)",
-            (lookups.data?.appointments || []).map((a) => ({
-              id: a.id,
-              name: a.title + " · " + a.clientName,
-            })),
+            (lookups.data?.appointments || [])
+              .map((a) => ({
+                id: a.id,
+                name: a.clientName + " · " + a.title + " · " + day(a.date),
+              }))
+              .sort(byName),
             true,
           )}
         </>

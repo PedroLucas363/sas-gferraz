@@ -1915,3 +1915,47 @@ fieldset.address {
   width: 100%;
   padding-left: 40px;
 }
+
+/* Searchable select (client field). */
+.search-select {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.search-select > input {
+  width: 100%;
+}
+.search-select-list {
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #fffefa;
+  border: 1px solid #d3d5c8;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow);
+}
+.search-select-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--touch);
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.search-select-list li.active,
+.search-select-list li[aria-selected="true"] {
+  background: #ecefe6;
+}
+.search-select-list li small {
+  color: var(--muted);
+}
