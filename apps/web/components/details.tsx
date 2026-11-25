@@ -19,12 +19,14 @@ export function Detail({
   onClose,
   onEdit,
   onOpen,
+  onReceive,
 }: {
   entity: Entity;
   id: string;
   onClose: () => void;
   onEdit: () => void;
   onOpen: (e: Entity, id: string) => void;
+  onReceive?: (initial: Record<string, unknown>) => void;
 }) {
   const cache = useQueryClient();
   const [error, setError] = useState("");
@@ -69,9 +71,28 @@ export function Detail({
               <div>
                 <h2>{r.name || r.title || r.description || "Recebimento"}</h2>
               </div>
-              {entity !== "payments" && (
-                <Button onClick={onEdit}>Editar cadastro</Button>
-              )}
+              <div className="detail-actions">
+                {entity === "appointments" &&
+                  onReceive &&
+                  Number(r.pending) > 0 && (
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        onReceive({
+                          clientId: r.clientId,
+                          allocations: [
+                            { appointmentId: r.id, amount: r.pending },
+                          ],
+                        })
+                      }
+                    >
+                      Registrar recebimento ({brl(r.pending)})
+                    </Button>
+                  )}
+                {entity !== "payments" && (
+                  <Button onClick={onEdit}>Editar cadastro</Button>
+                )}
+              </div>
             </div>
             <div className="tabs">
               {[

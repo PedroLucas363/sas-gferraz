@@ -78,6 +78,7 @@ function Shell() {
     entity: Entity;
     id?: string;
     edit: boolean;
+    initial?: Record<string, unknown>;
   } | null>(null);
   const [reportEntity, setReportEntity] = useState<Entity>("appointments");
   const me = useQuery({
@@ -343,6 +344,7 @@ function Shell() {
             key={`${dialog.entity}-${dialog.id}`}
             entity={dialog.entity}
             id={dialog.id}
+            initial={dialog.initial}
             onClose={() => setDialog(null)}
           />
         ) : (
@@ -352,6 +354,9 @@ function Shell() {
             id={dialog.id!}
             onClose={() => setDialog(null)}
             onEdit={() => setDialog({ ...dialog, edit: true })}
+            onReceive={(initial) =>
+              setDialog({ entity: "payments", edit: true, initial })
+            }
             onOpen={open}
           />
         ))}
