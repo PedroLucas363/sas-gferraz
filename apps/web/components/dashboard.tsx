@@ -12,7 +12,7 @@ import {
   Legend,
 } from "recharts";
 import { Query, querySchema, Entity } from "@gferraz/shared";
-import { api, queryString, brl } from "./api";
+import { api, queryString, brl, monthRange } from "./api";
 import { DataTable } from "./data-table";
 import { Button } from "./ui/button";
 import { ArrowUpRight } from "lucide-react";
@@ -72,6 +72,9 @@ export function Dashboard({
             <option value="cash">Caixa</option>
           </select>
         </label>
+        <Button variant="outline" onClick={() => update(monthRange())}>
+          Este mês
+        </Button>
         <Button
           variant="outline"
           onClick={() => onQuery(querySchema.parse({}))}

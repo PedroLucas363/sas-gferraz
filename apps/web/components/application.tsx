@@ -25,7 +25,7 @@ import {
   Navigation,
 } from "lucide-react";
 import { Entity, entityLabels, querySchema, Query } from "@gferraz/shared";
-import { api, today, ApiError } from "./api";
+import { api, monthRange, ApiError } from "./api";
 import { DataTable } from "./data-table";
 import { Dashboard } from "./dashboard";
 import { RecordForm } from "./record-form";
@@ -105,7 +105,7 @@ function Shell() {
       params.get("q")
         ? JSON.parse(params.get("q")!)
         : module === "dashboard"
-          ? { from: today().slice(0, 7) + "-01", to: today() }
+          ? monthRange()
           : module === "clients"
             ? { sort: [{ id: "name", desc: false }] }
             : {},
