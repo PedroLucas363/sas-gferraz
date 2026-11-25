@@ -1,6 +1,6 @@
 # Progresso do projeto
 
-Atualizado em 16/11/2026 (America/Sao_Paulo). Repositório recebido sem commits e sem arquivos. Os requisitos originais e as atualizações técnicas foram preservados em `docs/`.
+Atualizado em 25/11/2026 (America/Sao_Paulo). Repositório recebido sem commits e sem arquivos. Os requisitos originais e as atualizações técnicas foram preservados em `docs/`.
 
 ## Implementado
 
@@ -70,3 +70,15 @@ Não executado nesta etapa: `pnpm test:e2e` (o seletor do endereço no fluxo foi
 - O Compose publica a interface na rede local (`WEB_BIND`) e a API aceita o endereço local do computador (`ALLOW_LAN_ORIGIN`), mantendo recusadas as origens de outros sites. API e banco continuam fora da rede.
 - O inicializador Windows mostra o endereço para abrir no celular e avisa quando a rede está marcada como Pública.
 - O limite de tentativas de login continua único para todos os aparelhos (15 a cada 15 minutos), porque o proxy não informa o endereço de cada um.
+
+## Etapa de 25/11/2026: formulários mais simples
+
+- Campos de valor com o “R$” dentro da caixa, alinhados com os vizinhos.
+- Filtro e busca por situação e tipo aceitam a palavra mostrada na tela (“Confirmado”) e o código interno; o filtro “Igual a” desses campos usa uma lista.
+- Dashboard abre no mês atual inteiro, com o botão “Este mês”.
+- Evento com nome repetido é recusado (sem diferenciar maiúsculas, acentos e espaços), com atalho para vincular ao existente.
+- Cliente escolhida por busca com pausa na digitação; clientes, serviços e eventos em ordem alfabética nos formulários.
+- Data e horário separados; durações em `00:00`; campos numéricos sem valores negativos.
+- Atendimento com total na tela, deslocamento sugerido pelo trajeto e pelo custo do carro, duração sugerida (serviços + ida), vencimento igual à data e nome automático pelos serviços.
+
+Sem migração de banco.
