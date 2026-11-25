@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -221,33 +221,40 @@ function Editor({
       setError((e as Error).message);
     }
   }
+  // "R$" sits inside the box so money fields line up with their neighbours.
+  const money = (input: ReactNode) => (
+    <span className="money-input">
+      <span aria-hidden="true">R$</span>
+      {input}
+    </span>
+  );
   function field(
     key: string,
     label: string,
     type = "text",
     opts?: { money?: boolean; required?: boolean },
   ) {
+    const input = (
+      <input
+        aria-label={label}
+        type={type}
+        step={opts?.money ? "0.01" : key === "kmPerLiter" ? "0.001" : undefined}
+        {...form.register(key, {
+          valueAsNumber: ["duration", "year", "annualKm"].includes(key),
+          setValueAs:
+            key === "actualDuration"
+              ? (v) => (v === "" || v === null ? null : Number(v))
+              : type === "date"
+                ? (v) => v || null
+                : undefined,
+        })}
+        required={opts?.required}
+      />
+    );
     return (
       <label key={key}>
         {label}
-        {opts?.money && <small>R$</small>}
-        <input
-          aria-label={label}
-          type={type}
-          step={
-            opts?.money ? "0.01" : key === "kmPerLiter" ? "0.001" : undefined
-          }
-          {...form.register(key, {
-            valueAsNumber: ["duration", "year", "annualKm"].includes(key),
-            setValueAs:
-              key === "actualDuration"
-                ? (v) => (v === "" || v === null ? null : Number(v))
-                : type === "date"
-                  ? (v) => v || null
-                  : undefined,
-          })}
-          required={opts?.required}
-        />
+        {opts?.money ? money(input) : input}
       </label>
     );
   }
@@ -470,12 +477,14 @@ function Editor({
                 />
               </label>
               <label>
-                Valor unitário (R$)
-                <input
-                  type="number"
-                  step="0.01"
-                  {...form.register(`items.${i}.unitPrice`)}
-                />
+                Valor unitário
+                {money(
+                  <input
+                    type="number"
+                    step="0.01"
+                    {...form.register(`items.${i}.unitPrice`)}
+                  />,
+                )}
               </label>
               <Button
                 type="button"
@@ -548,12 +557,14 @@ function Editor({
                 </select>
               </label>
               <label>
-                Valor recebido (R$)
-                <input
-                  type="number"
-                  step="0.01"
-                  {...form.register(`allocations.${i}.amount`)}
-                />
+                Valor recebido
+                {money(
+                  <input
+                    type="number"
+                    step="0.01"
+                    {...form.register(`allocations.${i}.amount`)}
+                  />,
+                )}
               </label>
               <Button
                 type="button"

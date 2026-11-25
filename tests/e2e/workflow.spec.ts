@@ -96,7 +96,7 @@ test("cadastro, atendimento, pagamento parcial, indicador e visualização salva
   await page
     .getByLabel("Atendimento", { exact: true })
     .selectOption({ index: 1 });
-  await page.getByLabel("Valor recebido (R$)").fill("50");
+  await page.getByLabel("Valor recebido", { exact: true }).fill("50");
   await page.getByRole("button", { name: "Salvar registro" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "Visão geral", exact: true }).click();

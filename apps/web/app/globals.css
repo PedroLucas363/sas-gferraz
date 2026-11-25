@@ -1896,3 +1896,22 @@ fieldset.address {
 .sidebar nav button {
   line-height: 1.3;
 }
+
+/* Money fields: the currency prefix lives inside the box, so every field in a row keeps the same height. */
+.money-input {
+  position: relative;
+  display: flex;
+}
+.money-input > span {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 15px;
+  pointer-events: none;
+}
+.money-input > input {
+  width: 100%;
+  padding-left: 40px;
+}
