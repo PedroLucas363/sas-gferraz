@@ -79,7 +79,7 @@ test("cadastro, atendimento, pagamento parcial, indicador e visualização salva
   await page.getByLabel("Nome do atendimento").fill("Atendimento integração");
   await page
     .getByLabel("Serviço", { exact: true })
-    .selectOption({ label: "Maquiagem e penteado" });
+    .selectOption({ label: "Maquiagem e penteado · 01:00" });
   await page.getByRole("button", { name: "Salvar registro" }).click();
   await expect(
     page.getByRole("cell", { name: "Atendimento integração", exact: true }),
