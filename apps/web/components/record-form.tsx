@@ -207,6 +207,20 @@ function Editor({
         price: item.unitPrice,
       });
   const watch = form.watch();
+  const [eventName, setEventName] = useState("");
+  // Same rule as the server: case, accents and spacing do not make a new name.
+  const nameKey = (v: string) =>
+    v
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  const eventTwin: { id: string; name: string } | undefined = eventName.trim()
+    ? (lookups.data?.events || []).find(
+        (e: { name: string }) => nameKey(e.name) === nameKey(eventName),
+      )
+    : undefined;
   function applyAddress(next: AddressData) {
     setAddress(next);
     form.setValue("addressData", next);
@@ -415,24 +429,24 @@ function Editor({
             <summary>Criar um evento</summary>
             <div className="form-row">
               <input
-                id="event-name"
                 aria-label="Nome do evento"
                 placeholder="Nome do evento"
+                value={eventName}
+                onChange={(e) => setEventName(e.target.value)}
               />
               <Button
                 type="button"
                 variant="outline"
+                disabled={!!eventTwin || eventName.trim().length < 2}
                 onClick={async () => {
                   try {
-                    const name = (
-                      document.getElementById("event-name") as HTMLInputElement
-                    ).value;
                     const e = await api("events", {
                       method: "POST",
-                      body: JSON.stringify({ name }),
+                      body: JSON.stringify({ name: eventName }),
                     });
-                    form.setValue("eventId", e.id);
                     await cache.invalidateQueries({ queryKey: ["lookups"] });
+                    form.setValue("eventId", e.id);
+                    setEventName("");
                   } catch (e) {
                     setError((e as Error).message);
                   }
@@ -441,6 +455,22 @@ function Editor({
                 Criar e vincular
               </Button>
             </div>
+            {eventTwin && (
+              <p role="alert" className="error">
+                Já existe o evento “{eventTwin.name}”.{" "}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    form.setValue("eventId", eventTwin.id);
+                    setEventName("");
+                  }}
+                >
+                  Vincular a ele
+                </Button>
+              </p>
+            )}
           </details>
           <h3>Serviços contratados</h3>
           {items.fields.map((f, i) => (

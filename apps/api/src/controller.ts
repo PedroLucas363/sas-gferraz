@@ -14,6 +14,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  ConflictException,
   ParseUUIDPipe,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
@@ -46,6 +47,13 @@ import { ImportService } from "./import.service";
 import { selectRows } from "./query";
 import { RouteService } from "./route.service";
 import { lookupCep } from "./cep";
+const eventKey = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 type AuthReq = Request & { user: Context };
 const entity = (s: string) => z.enum(entities).parse(s);
 const parseQuery = (v?: string) => querySchema.parse(v ? JSON.parse(v) : {});
@@ -324,6 +332,7 @@ export class AppController {
   @Get("events") events(@Req() req: AuthReq) {
     return db.event.findMany({
       where: { organizationId: req.user.organizationId },
+      orderBy: { name: "asc" },
     });
   }
   @Post("events") async event(@Req() req: AuthReq, @Body() body: unknown) {
@@ -333,7 +342,19 @@ export class AppController {
         notes: z.string().max(2000).default(""),
       })
       .parse(body);
+    v.name = v.name.trim().replace(/\s+/g, " ");
     return atomic(async (tx) => {
+      // Same name ignoring case, accents and spacing counts as a duplicate.
+      const key = eventKey(v.name);
+      const existing = await tx.event.findMany({
+        where: { organizationId: req.user.organizationId },
+        select: { name: true },
+      });
+      const twin = existing.find((e) => eventKey(e.name) === key);
+      if (twin)
+        throw new ConflictException(
+          `Já existe um evento chamado "${twin.name}". Escolha-o na lista ou use outro nome.`,
+        );
       const r = await tx.event.create({
         data: { ...v, organizationId: req.user.organizationId },
       });

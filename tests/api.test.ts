@@ -650,3 +650,25 @@ test("rota do dia, estimativas de trajeto, endereço estruturado e histórico de
   assert.equal(filtered.length, 1);
   assert.equal((await req("audit", "GET", undefined, other)).data.length, 1);
 });
+test("evento não pode repetir o nome dentro da mesma empresa", async () => {
+  const cookie = await tenant();
+  const other = await tenant();
+  const first = await create(
+    "events",
+    { name: "Casamento Ana  e Rafa" },
+    cookie,
+  );
+  for (const name of ["casamento ana e rafa", " CASAMENTO  Âna e Rafa "]) {
+    const r = await req("events", "POST", { name }, cookie);
+    assert.equal(r.status, 409, name);
+    assert.match(r.data.message, /Já existe um evento/);
+  }
+  // Another company may use the same name.
+  await create("events", { name: "Casamento Ana e Rafa" }, other);
+  const list = (await req("events", "GET", undefined, cookie)).data;
+  assert.deepEqual(
+    list.map((e: any) => e.id),
+    [first.id],
+  );
+  assert.equal(list[0].name, "Casamento Ana e Rafa");
+});
