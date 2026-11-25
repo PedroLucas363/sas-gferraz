@@ -41,6 +41,13 @@ export function vehicleCost(v: any) {
       ).div(v.annualKm),
     );
 }
+/**
+ * Travel fee suggested for a visit: the round trip (twice the one-way distance) at the
+ * vehicle's full cost per km (fuel plus yearly fixed costs spread over the yearly mileage).
+ */
+export function travelFeeFor(oneWayKm: string, vehicle: any) {
+  return D(oneWayKm).mul(2).mul(vehicleCost(vehicle)).toDecimalPlaces(2);
+}
 export function localDate(v: Date) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",

@@ -1,7 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { defaultSettings } from "@gferraz/shared";
-import { db, Context, atomic, audit, sum } from "./db";
-import { appointmentTotal, allocatedPaid, localDate } from "./finance";
+import { db, Context, atomic, audit, sum, D } from "./db";
+import {
+  appointmentTotal,
+  allocatedPaid,
+  localDate,
+  travelFeeFor,
+  vehicleCost,
+} from "./finance";
 import { appointmentInclude } from "./data.service";
 import {
   ROUTE_STATUSES,
@@ -110,6 +116,91 @@ export class RouteService {
         total: sum(appointments.map((a) => a.total)).toFixed(2),
         pending: sum(appointments.map((a) => a.pending)).toFixed(2),
       },
+    };
+  }
+  /**
+   * Live figures for the appointment form: contracted total (finance.ts), the informed trip
+   * from the starting address, the travel fee it suggests and the suggested duration
+   * (services plus the one-way trip). Nothing is saved.
+   */
+  async quote(
+    c: Context,
+    input: {
+      address: string;
+      items: { serviceId: string; quantity: number; unitPrice: string }[];
+      discount: string;
+      extra: string;
+      travelFee: string;
+    },
+  ) {
+    const w = { organizationId: c.organizationId };
+    const org = await db.organization.findUniqueOrThrow({
+      where: { id: c.organizationId },
+    });
+    const origin = { ...defaultSettings, ...(org.settings as object) }
+      .originAddress as string;
+    const ids = input.items.map((i) => i.serviceId).filter(Boolean);
+    const services = ids.length
+      ? await db.service.findMany({
+          where: { ...w, id: { in: ids } },
+          select: { id: true, duration: true },
+        })
+      : [];
+    const serviceMinutes = input.items.reduce(
+      (t, i) =>
+        t +
+        (services.find((s) => s.id === i.serviceId)?.duration ?? 0) *
+          i.quantity,
+      0,
+    );
+    const ok = addressKey(origin),
+      dk = addressKey(input.address);
+    const leg =
+      ok && dk
+        ? ((await db.routeLeg.findUnique({
+            where: {
+              organizationId_originKey_destinationKey: {
+                ...w,
+                originKey: ok,
+                destinationKey: dk,
+              },
+            },
+          })) ??
+          // The same road the other way is the best informed guess available.
+          (await db.routeLeg.findUnique({
+            where: {
+              organizationId_originKey_destinationKey: {
+                ...w,
+                originKey: dk,
+                destinationKey: ok,
+              },
+            },
+          })))
+        : null;
+    const vehicle = await db.vehicle.findFirst({
+      where: { ...w, archivedAt: null },
+      orderBy: { name: "asc" },
+    });
+    const travel = leg
+      ? { minutes: leg.minutes, distanceKm: leg.distanceKm.toFixed(2) }
+      : null;
+    return {
+      origin,
+      address: input.address,
+      travel,
+      vehicle: vehicle
+        ? { name: vehicle.name, costPerKm: vehicleCost(vehicle).toFixed(4) }
+        : null,
+      suggestedTravelFee:
+        travel && vehicle
+          ? travelFeeFor(travel.distanceKm, vehicle).toFixed(2)
+          : null,
+      serviceMinutes,
+      suggestedDuration: serviceMinutes + (travel?.minutes ?? 0),
+      servicesTotal: sum(
+        input.items.map((i) => D(i.unitPrice).mul(i.quantity)),
+      ).toFixed(2),
+      total: appointmentTotal(input).toFixed(2),
     };
   }
   /** Travel estimate informed by the user for a pair of addresses; reused whenever the pair repeats. */

@@ -23,7 +23,13 @@ import { Dialog } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { AddressFields } from "./address-fields";
 import { SearchSelect, searchKey } from "./ui/search-select";
-import { DurationInput, nonNegative, blockSigns } from "./ui/number";
+import {
+  DurationInput,
+  nonNegative,
+  blockSigns,
+  toHhmm,
+  useDebounced,
+} from "./ui/number";
 const byName = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
 const errorLabels: Record<string, string> = {
@@ -243,6 +249,160 @@ function Editor({
     if (entity === "appointments" && when.date && when.time)
       form.setValue("startsAt", `${when.date}T${when.time}:00-03:00`);
   }, [entity, form, when]);
+  // Fields the user typed into stop following the automatic suggestions.
+  const [touched, setTouched] = useState({
+    title: !!record,
+    duration: !!record,
+    travelFee: !!record,
+  });
+  // The balance due date follows the appointment date unless it was set to another day.
+  function changeDate(next: string) {
+    const due = form.getValues("dueDate");
+    if (!due || due === when.date)
+      form.setValue("dueDate", next, { shouldValidate: true });
+    setWhen({ ...when, date: next });
+  }
+  // Live figures from the server (finance rules stay there), asked after a pause in typing.
+  const quoteInput = useDebounced(
+    entity === "appointments"
+      ? {
+          address: formatAddress(address),
+          items: (watch.items || []).map((i: any) => ({
+            serviceId: i.serviceId || "",
+            quantity: Number(i.quantity) || 1,
+            unitPrice: String(i.unitPrice ?? "0"),
+          })),
+          discount: String(watch.discount ?? "0"),
+          extra: String(watch.extra ?? "0"),
+          travelFee: String(watch.travelFee ?? "0"),
+        }
+      : null,
+    350,
+  );
+  const quoteQuery = useQuery({
+    queryKey: ["quote", quoteInput],
+    queryFn: () =>
+      api("agenda/quote", { method: "POST", body: JSON.stringify(quoteInput) }),
+    enabled: !!quoteInput,
+    placeholderData: (prev) => prev,
+  });
+  const quote = quoteQuery.data as
+    | {
+        origin: string;
+        travel: { minutes: number; distanceKm: string } | null;
+        vehicle: { name: string; costPerKm: string } | null;
+        suggestedTravelFee: string | null;
+        serviceMinutes: number;
+        suggestedDuration: number;
+        servicesTotal: string;
+        total: string;
+      }
+    | undefined;
+  useEffect(() => {
+    if (!quote) return;
+    if (!touched.duration && quote.suggestedDuration >= 5)
+      form.setValue("duration", quote.suggestedDuration, {
+        shouldValidate: true,
+      });
+    if (!touched.travelFee && quote.suggestedTravelFee)
+      form.setValue("travelFee", quote.suggestedTravelFee, {
+        shouldValidate: true,
+      });
+  }, [quote, touched, form]);
+  // A new appointment is named after its services until the user types a name.
+  const serviceNames = (watch.items || [])
+    .map((i: any) => serviceOptions.find((s) => s.id === i.serviceId)?.name)
+    .filter(Boolean)
+    .join(" + ");
+  useEffect(() => {
+    if (entity === "appointments" && !touched.title && serviceNames)
+      form.setValue("title", serviceNames.slice(0, 160), {
+        shouldValidate: true,
+      });
+  }, [entity, serviceNames, touched.title, form]);
+  const [leg, setLeg] = useState({ minutes: "", distanceKm: "" });
+  async function saveLeg() {
+    setError("");
+    try {
+      await api("agenda/legs", {
+        method: "PUT",
+        body: JSON.stringify({
+          origin: quote?.origin,
+          destination: formatAddress(address),
+          minutes: Number(leg.minutes),
+          distanceKm: leg.distanceKm.replace(",", "."),
+        }),
+      });
+      setLeg({ minutes: "", distanceKm: "" });
+      await quoteQuery.refetch();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  function travelInfo() {
+    if (!quote) return <p className="muted">Calculando…</p>;
+    if (!quote.origin)
+      return (
+        <p className="muted">
+          Cadastre o endereço de partida em Configurações para calcular o
+          deslocamento.
+        </p>
+      );
+    if (!formatAddress(address))
+      return (
+        <p className="muted">
+          Informe o endereço do atendimento para calcular o deslocamento.
+        </p>
+      );
+    if (!quote.travel)
+      return (
+        <div className="travel-missing">
+          <p className="muted">
+            Ainda não há tempo e distância de casa até este endereço. Informe
+            uma vez; fica guardado para os próximos atendimentos aqui.
+          </p>
+          <div className="form-row">
+            <label>
+              Tempo de ida (min)
+              <input
+                type="number"
+                inputMode="numeric"
+                max="1440"
+                {...nonNegative}
+                value={leg.minutes}
+                onChange={(e) => setLeg({ ...leg, minutes: e.target.value })}
+              />
+            </label>
+            <label>
+              Distância de ida (km)
+              <input
+                inputMode="decimal"
+                value={leg.distanceKm}
+                onKeyDown={blockSigns}
+                onChange={(e) => setLeg({ ...leg, distanceKm: e.target.value })}
+              />
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!leg.minutes || !leg.distanceKm}
+              onClick={saveLeg}
+            >
+              Guardar trajeto
+            </Button>
+          </div>
+        </div>
+      );
+    return (
+      <p className="muted">
+        De casa até aqui: {toHhmm(quote.travel.minutes)} e{" "}
+        {quote.travel.distanceKm.replace(".", ",")} km (só ida).{" "}
+        {quote.vehicle
+          ? `Ida e volta pelo custo do ${quote.vehicle.name} (${brl(quote.vehicle.costPerKm)}/km): ${brl(quote.suggestedTravelFee)}.`
+          : "Cadastre o carro em Veículos para sugerir o valor do deslocamento."}
+      </p>
+    );
+  }
   const [eventName, setEventName] = useState("");
   // Same rule as the server: case, accents and spacing do not make a new name.
   const nameKey = (v: string) => searchKey(v).replace(/\s+/g, " ");
@@ -304,11 +464,7 @@ function Editor({
         key={key}
         label={label}
         value={watch[key]}
-        onChange={(m) =>
-          form.setValue(key, m === null && !nullable ? 0 : m, {
-            shouldValidate: true,
-          })
-        }
+        onChange={(m) => form.setValue(key, m === null && !nullable ? 0 : m)}
       />
     );
   }
@@ -419,7 +575,17 @@ function Editor({
             )
           }
           <div className="form-grid">
-            {field("title", "Nome do atendimento", "text", { required: true })}
+            <label>
+              Nome do atendimento
+              <input
+                aria-label="Nome do atendimento"
+                required
+                {...form.register("title", {
+                  onChange: () => setTouched((t) => ({ ...t, title: true })),
+                })}
+              />
+            </label>
+            {select("status", "Situação", Object.entries(statusLabels))}
             <label>
               Data
               <input
@@ -427,7 +593,7 @@ function Editor({
                 aria-label="Data"
                 required
                 value={when.date}
-                onChange={(e) => setWhen({ ...when, date: e.target.value })}
+                onChange={(e) => changeDate(e.target.value)}
               />
             </label>
             <label>
@@ -441,14 +607,6 @@ function Editor({
                 onChange={(e) => setWhen({ ...when, time: e.target.value })}
               />
             </label>
-            {duration("duration", "Duração prevista (horas:minutos)")}
-            {duration(
-              "actualDuration",
-              "Duração realizada (horas:minutos)",
-              true,
-            )}
-            {select("status", "Situação", Object.entries(statusLabels))}
-            {field("dueDate", "Vencimento do saldo", "date")}
           </div>
           <AddressFields
             legend="Endereço do atendimento"
@@ -518,60 +676,72 @@ function Editor({
             )}
           </details>
           <h3>Serviços contratados</h3>
-          {items.fields.map((f, i) => (
-            <div className="item-row" key={f.id}>
-              <label>
-                Serviço
-                <select
-                  aria-label="Serviço"
-                  {...form.register(`items.${i}.serviceId`)}
-                  onChange={(e) => {
-                    form.setValue(`items.${i}.serviceId`, e.target.value);
-                    const s = serviceOptions.find(
-                      (s) => s.id === e.target.value,
-                    );
-                    if (s) form.setValue(`items.${i}.unitPrice`, s.price);
-                  }}
-                >
-                  <option value="">Selecione</option>
-                  {serviceOptions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Quantidade
-                <input
-                  type="number"
-                  min="1"
-                  onKeyDown={blockSigns}
-                  {...form.register(`items.${i}.quantity`, {
-                    valueAsNumber: true,
-                  })}
-                />
-              </label>
-              <label>
-                Valor unitário
-                {money(
+          {items.fields.map((f, i) => {
+            const chosen = serviceOptions.find(
+              (s) => s.id === watch.items?.[i]?.serviceId,
+            );
+            return (
+              <div className="item-row" key={f.id}>
+                <label>
+                  Serviço
+                  <select
+                    aria-label="Serviço"
+                    {...form.register(`items.${i}.serviceId`)}
+                    onChange={(e) => {
+                      form.setValue(`items.${i}.serviceId`, e.target.value);
+                      const s = serviceOptions.find(
+                        (s) => s.id === e.target.value,
+                      );
+                      if (s) form.setValue(`items.${i}.unitPrice`, s.price);
+                    }}
+                  >
+                    <option value="">Selecione</option>
+                    {serviceOptions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                        {s.duration ? ` · ${toHhmm(s.duration)}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {chosen?.duration ? (
+                    <small>
+                      Duração de referência: {toHhmm(chosen.duration)}
+                    </small>
+                  ) : null}
+                </label>
+                <label>
+                  Quantidade
                   <input
                     type="number"
-                    step="0.01"
-                    {...nonNegative}
-                    {...form.register(`items.${i}.unitPrice`)}
-                  />,
-                )}
-              </label>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => items.remove(i)}
-              >
-                Remover
-              </Button>
-            </div>
-          ))}
+                    min="1"
+                    onKeyDown={blockSigns}
+                    {...form.register(`items.${i}.quantity`, {
+                      valueAsNumber: true,
+                    })}
+                  />
+                </label>
+                <label>
+                  Valor unitário
+                  {money(
+                    <input
+                      type="number"
+                      step="0.01"
+                      {...nonNegative}
+                      {...form.register(`items.${i}.unitPrice`)}
+                    />,
+                  )}
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={items.fields.length === 1}
+                  onClick={() => items.remove(i)}
+                >
+                  Remover
+                </Button>
+              </div>
+            );
+          })}
           <Button
             type="button"
             variant="outline"
@@ -581,17 +751,98 @@ function Editor({
           >
             Adicionar serviço
           </Button>
+          <section className="travel-box" aria-label="Deslocamento">
+            <h3>Deslocamento</h3>
+            {travelInfo()}
+            <div className="form-grid">
+              <label>
+                Deslocamento cobrado
+                {money(
+                  <input
+                    type="number"
+                    step="0.01"
+                    aria-label="Deslocamento cobrado"
+                    {...nonNegative}
+                    {...form.register("travelFee", {
+                      onChange: () =>
+                        setTouched((t) => ({ ...t, travelFee: true })),
+                    })}
+                  />,
+                )}
+                {quote?.suggestedTravelFee &&
+                  quote.suggestedTravelFee !== String(watch.travelFee) && (
+                    <small>
+                      Sugerido: {brl(quote.suggestedTravelFee)}{" "}
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() =>
+                          form.setValue("travelFee", quote.suggestedTravelFee, {
+                            shouldValidate: true,
+                          })
+                        }
+                      >
+                        usar
+                      </button>
+                    </small>
+                  )}
+              </label>
+              {field("discount", "Desconto", "number", { money: true })}
+              {field("extra", "Adicionais", "number", { money: true })}
+            </div>
+          </section>
           <div className="form-grid">
-            {field("discount", "Desconto", "number", { money: true })}
-            {field("extra", "Adicionais", "number", { money: true })}
-            {field("travelFee", "Deslocamento cobrado", "number", {
-              money: true,
-            })}
+            <DurationInput
+              label="Duração prevista (horas:minutos)"
+              value={watch.duration}
+              onChange={(m) => {
+                setTouched((t) => ({ ...t, duration: true }));
+                form.setValue("duration", m ?? 0);
+              }}
+              hint={
+                quote && quote.suggestedDuration > 0
+                  ? `Serviços ${toHhmm(quote.serviceMinutes)}` +
+                    (quote.travel
+                      ? ` + ida ${toHhmm(quote.travel.minutes)}`
+                      : "") +
+                    ` = ${toHhmm(quote.suggestedDuration)}`
+                  : undefined
+              }
+              action={
+                quote &&
+                quote.suggestedDuration > 0 &&
+                quote.suggestedDuration !== watch.duration
+                  ? {
+                      label: "usar",
+                      onClick: () =>
+                        form.setValue("duration", quote.suggestedDuration, {
+                          shouldValidate: true,
+                        }),
+                    }
+                  : undefined
+              }
+            />
+            {duration(
+              "actualDuration",
+              "Duração realizada (horas:minutos)",
+              true,
+            )}
+            {field("dueDate", "Vencimento do saldo", "date")}
           </div>
-          <p className="muted">
-            O valor final e o saldo serão calculados pelo servidor ao salvar. O
-            preço do atendimento é independente do catálogo.
-          </p>
+          <div className="appointment-total" aria-live="polite">
+            <div>
+              <span>Serviços</span>
+              <strong>{quote ? brl(quote.servicesTotal) : "—"}</strong>
+            </div>
+            <div>
+              <span>Total do atendimento</span>
+              <strong>{quote ? brl(quote.total) : "—"}</strong>
+            </div>
+            <small>
+              Serviços − desconto + adicionais + deslocamento. O saldo é
+              atualizado pelos recebimentos.
+            </small>
+          </div>
         </>
       )}
       {entity === "payments" && (

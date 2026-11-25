@@ -672,3 +672,96 @@ test("evento não pode repetir o nome dentro da mesma empresa", async () => {
   );
   assert.equal(list[0].name, "Casamento Ana e Rafa");
 });
+test("prévia do atendimento: total, deslocamento sugerido e duração sugerida", async () => {
+  const cookie = await tenant();
+  const origin = "Rua da Casa, 10, Centro, Campinas - SP";
+  const destination = "Av. Brasil, 500, Centro, Campinas - SP";
+  const quote = async (body: unknown) =>
+    (await req("agenda/quote", "POST", body, cookie)).data;
+  const make = await create(
+    "records/services",
+    { name: "Make", category: "Maquiagem", price: "180", duration: 60 },
+    cookie,
+  );
+  const hair = await create(
+    "records/services",
+    { name: "Penteado", category: "Penteado", price: "150", duration: 45 },
+    cookie,
+  );
+  const items = [
+    { serviceId: make.id, quantity: 2, unitPrice: "180" },
+    { serviceId: hair.id, quantity: 1, unitPrice: "150" },
+  ];
+  const body = {
+    address: destination,
+    items,
+    discount: "10",
+    extra: "5",
+    travelFee: "40",
+  };
+  // No starting address yet: totals and service time only.
+  let q = await quote(body);
+  assert.equal(q.servicesTotal, "510.00");
+  assert.equal(q.total, "545.00");
+  assert.equal(q.serviceMinutes, 165);
+  assert.equal(q.suggestedDuration, 165);
+  assert.equal(q.travel, null);
+  assert.equal(q.suggestedTravelFee, null);
+  const s = await req("settings", "GET", undefined, cookie);
+  await req(
+    "settings",
+    "PATCH",
+    {
+      name: s.data.name,
+      settings: { ...s.data.settings, originAddress: origin },
+    },
+    cookie,
+  );
+  // The trip was informed the other way round; the same road is reused.
+  await req(
+    "agenda/legs",
+    "PUT",
+    {
+      origin: destination,
+      destination: origin,
+      minutes: 25,
+      distanceKm: "12.5",
+    },
+    cookie,
+  );
+  q = await quote(body);
+  assert.deepEqual(q.travel, { minutes: 25, distanceKm: "12.50" });
+  assert.equal(q.suggestedDuration, 190);
+  assert.equal(q.suggestedTravelFee, null, "sem veículo não há valor sugerido");
+  await create(
+    "records/vehicles",
+    {
+      name: "Carro",
+      year: 2016,
+      fuel: "Etanol",
+      kmPerLiter: "10",
+      fuelPrice: "5.00",
+      annualKm: 10000,
+      insurance: "1000",
+      maintenance: "0",
+      tires: "0",
+      oil: "0",
+      tax: "0",
+      depreciation: "0",
+      other: "0",
+    },
+    cookie,
+  );
+  // 0.50/km of fuel + 1000/10000 fixed = 0.60/km; 25 km round trip = 15.00.
+  q = await quote(body);
+  assert.equal(q.vehicle.costPerKm, "0.6000");
+  assert.equal(q.suggestedTravelFee, "15.00");
+  // Half-typed values do not break the preview.
+  q = await quote({
+    address: "",
+    items: [{ serviceId: "", quantity: 1, unitPrice: "" }],
+    discount: "-3",
+  });
+  assert.equal(q.total, "0.00");
+  assert.equal((await req("agenda/quote", "POST", body, "")).status, 401);
+});

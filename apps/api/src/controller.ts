@@ -385,6 +385,36 @@ export class AppController {
   day(@Req() req: AuthReq, @Q("date") day?: string) {
     return this.routes.day(req.user, day ? date.parse(day) : undefined);
   }
+  @Post("agenda/quote")
+  @ApiOperation({
+    summary:
+      "Prévia do atendimento: total, deslocamento sugerido e duração sugerida. Não grava nada.",
+  })
+  quote(@Req() req: AuthReq, @Body() body: unknown) {
+    // Lenient on purpose: the form asks while the user is still typing.
+    const amount = money.catch("0");
+    return this.routes.quote(
+      req.user,
+      z
+        .object({
+          address: z.string().max(500).catch(""),
+          items: z
+            .array(
+              z.object({
+                serviceId: z.string().max(40).catch(""),
+                quantity: z.number().int().min(1).max(100).catch(1),
+                unitPrice: amount,
+              }),
+            )
+            .max(30)
+            .catch([]),
+          discount: amount,
+          extra: amount,
+          travelFee: amount,
+        })
+        .parse(body ?? {}),
+    );
+  }
   @Put("agenda/legs")
   @ApiOperation({
     summary: "Estimativa informada de tempo e distância entre dois endereços",
