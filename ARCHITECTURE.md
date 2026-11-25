@@ -30,11 +30,13 @@ A auditoria cobre todas as mutações e também acesso, exportações e prévia 
 
 ## Formulário de atendimento
 
-`POST /agenda/quote` devolve a prévia do atendimento sem gravar: subtotal dos serviços e total (`appointmentTotal` de `finance.ts`), trajeto de casa até o endereço (`RouteLeg`, aceitando o sentido inverso), custo/km do primeiro veículo ativo em ordem de nome, deslocamento sugerido (`travelFeeFor`, também em `finance.ts`) e duração sugerida. A validação é tolerante porque o formulário pergunta enquanto a usuária digita; a gravação continua passando pelos esquemas completos. O formulário espera uma pausa de 350 ms antes de perguntar.
+`POST /agenda/quote` devolve a prévia do atendimento sem gravar: subtotal dos serviços e total (`appointmentTotal` de `finance.ts`), trajeto de casa até o endereço (`RouteLeg`, aceitando o sentido inverso), custo/km do primeiro veículo ativo em ordem de nome, deslocamento sugerido pela tabela de preços das configurações (`travelFeeFromTable`, em `finance.ts`, na coluna do combustível desse veículo), custo estimado do trajeto para comparação (`travelFeeFor`) e duração sugerida. A validação é tolerante porque o formulário pergunta enquanto a usuária digita; a gravação continua passando pelos esquemas completos. O formulário espera uma pausa de 350 ms antes de perguntar.
 
 Campos preenchidos automaticamente (nome, duração, deslocamento) deixam de seguir a sugestão quando a usuária os edita; em registros já salvos, só aparecem como sugestão. O vencimento segue a data enquanto for igual a ela.
 
 `fieldValueLabels` (pacote compartilhado) liga códigos gravados (`status`, `kind`) às palavras mostradas. `query.ts` aceita os dois nos filtros e na busca, e a tabela oferece a lista de palavras no filtro “Igual a/Diferente de”.
+
+A ficha do atendimento (`GET /records/appointments/:id`) traz total, recebido e saldo de `finance.ts`; o botão “Registrar recebimento” usa esse saldo, sem conta na tela.
 
 Eventos não repetem nome dentro da empresa: o servidor compara sem maiúsculas, acentos e espaços extras e responde 409.
 

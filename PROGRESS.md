@@ -79,6 +79,8 @@ Não executado nesta etapa: `pnpm test:e2e` (o seletor do endereço no fluxo foi
 - Evento com nome repetido é recusado (sem diferenciar maiúsculas, acentos e espaços), com atalho para vincular ao existente.
 - Cliente escolhida por busca com pausa na digitação; clientes, serviços e eventos em ordem alfabética nos formulários.
 - Data e horário separados; durações em `00:00`; campos numéricos sem valores negativos.
-- Atendimento com total na tela, deslocamento sugerido pelo trajeto e pelo custo do carro, duração sugerida (serviços + ida), vencimento igual à data e nome automático pelos serviços.
+- Atendimento com total na tela, deslocamento sugerido pela tabela por distância (Configurações), duração sugerida (serviços + ida), vencimento igual à data e nome automático pelos serviços.
 
 Sem migração de banco.
+
+- Busca também em Serviço e no Atendimento do recebimento; o valor recebido começa com o saldo; botão “Registrar recebimento” na ficha do atendimento.

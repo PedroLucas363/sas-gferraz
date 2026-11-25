@@ -72,7 +72,7 @@ Regras da rota do dia:
 
 `Custo estimado do trecho = km informados × custo/km + estacionamento + pedágio`. O valor cobrado da cliente é independente. Provisões anuais e trechos estimados não criam despesas e não são deduzidos novamente do resultado. Despesas reais devem ser lançadas uma única vez. O custo/km e os trechos servem ao orçamento e ao roteiro, com fonte manual identificada.
 
-`Deslocamento sugerido = distância de ida × 2 × custo/km do carro`, arredondado em centavos (`travelFeeFor`). É só sugestão: o valor cobrado continua sendo o informado em `travelFee`. `Duração sugerida = Σ(duração do serviço × quantidade) + minutos de ida`. Nenhuma coluna nova.
+`Organization.settings.travelFeeTable` guarda a tabela de deslocamento: `[{ upToKm, ethanol, gasoline }]`, até 30 faixas, sem duas com a mesma distância. `Deslocamento sugerido` = valor da menor faixa com `upToKm ≥ distância de ida × 2`, na coluna do combustível do carro (etanol sem carro); acima da última faixa ou sem tabela, não há sugestão (`travelFeeFromTable`). O custo do trajeto (`distância de ida × 2 × custo/km`, `travelFeeFor`) é mostrado só para comparação. O valor cobrado continua sendo o informado em `travelFee`. `Duração sugerida = Σ(duração do serviço × quantidade) + minutos de ida`. Nenhuma coluna nova.
 
 ## Migração histórica
 

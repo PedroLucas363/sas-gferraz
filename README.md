@@ -28,9 +28,11 @@ Cadastre o endereço de partida em Configurações para ter horário de saída e
 - **Cliente**: caixa de busca. Aberta sem texto, lista todas as clientes de A a Z; ao digitar, filtra pelo nome (sem diferenciar acentos) ou pelo telefone.
 - **Data** e **Horário** são campos separados. Durações são digitadas como `00:00`.
 - **Total do atendimento** aparece enquanto o formulário é preenchido, calculado pelo servidor.
-- **Deslocamento**: com o endereço de partida, o endereço do atendimento e um carro cadastrados, a tela mostra tempo e distância de casa até a cliente e sugere o valor de ida e volta pelo custo por km do carro. Sem trajeto conhecido, informe tempo e distância ali mesmo; ficam guardados para a Rota do dia e os próximos atendimentos.
+- **Deslocamento**: com o endereço de partida e o do atendimento, a tela mostra tempo e distância de casa até a cliente e sugere o valor pela **tabela de deslocamento** (Configurações): faixas de distância de ida e volta com um valor para etanol e outro para gasolina, usando o combustível do carro cadastrado. O custo estimado do carro aparece para comparação. Sem trajeto conhecido, informe tempo e distância ali mesmo; ficam guardados para a Rota do dia e os próximos atendimentos.
 - **Duração prevista** vem com a soma dos serviços mais a ida de casa até a cliente. **Vencimento do saldo** acompanha a data do atendimento.
 - Em atendimento já salvo, as sugestões aparecem com o botão “usar” e nada muda sozinho.
+- **Serviço** e, no recebimento, **Atendimento** também são caixas de busca. Ao escolher o atendimento, o valor recebido começa com o saldo.
+- Na ficha do atendimento, **Registrar recebimento** abre o recebimento já preenchido com a cliente, o atendimento e o saldo.
 
 ## Acesso pelo celular na rede local
 
