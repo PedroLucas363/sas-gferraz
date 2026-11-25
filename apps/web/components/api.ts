@@ -32,11 +32,11 @@ export async function api(path: string, options: RequestInit = {}) {
   return res.json();
 }
 export const queryString = (q: Query) => encodeURIComponent(JSON.stringify(q));
-export async function allRows(entity: Entity) {
+export async function allRows(entity: Entity, sort: Query["sort"] = []) {
   let rows: any[] = [];
   for (let page = 0; page < 100; page++) {
     const r = await api(
-      `data/${entity}?q=${queryString(querySchema.parse({ page, pageSize: 100 }))}`,
+      `data/${entity}?q=${queryString(querySchema.parse({ page, pageSize: 100, sort }))}`,
     );
     rows = rows.concat(r.rows);
     if (rows.length >= r.total) return rows;

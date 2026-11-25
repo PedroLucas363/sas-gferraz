@@ -106,7 +106,9 @@ function Shell() {
         ? JSON.parse(params.get("q")!)
         : module === "dashboard"
           ? { from: today().slice(0, 7) + "-01", to: today() }
-          : {},
+          : module === "clients"
+            ? { sort: [{ id: "name", desc: false }] }
+            : {},
     );
   } catch {
     query = querySchema.parse({});

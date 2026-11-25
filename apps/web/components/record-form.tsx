@@ -192,7 +192,7 @@ function Editor({
   const lookups = useQuery({
     queryKey: ["lookups"],
     queryFn: async () => ({
-      clients: await allRows("clients"),
+      clients: await allRows("clients", [{ id: "name", desc: false }]),
       services: await allRows("services"),
       appointments: await allRows("appointments"),
       events: await api("events"),
