@@ -17,7 +17,7 @@ export const MAX_WAYPOINTS = 3;
 export function addressKey(value: string | null | undefined) {
   return (value || "")
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
