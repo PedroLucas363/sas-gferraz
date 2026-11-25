@@ -12,6 +12,7 @@ import { Dialog } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { DataTable } from "./data-table";
 import { History } from "./history";
+import { nonNegative } from "./ui/number";
 export function Detail({
   entity,
   id,
@@ -296,6 +297,7 @@ export function Detail({
                       <input
                         type="number"
                         step="0.01"
+                        {...nonNegative}
                         value={refund.amount}
                         onChange={(e) =>
                           setRefund({ ...refund, amount: e.target.value })

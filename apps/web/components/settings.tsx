@@ -6,6 +6,7 @@ import { api } from "./api";
 import { Button } from "./ui/button";
 import { AddressFields } from "./address-fields";
 import { History } from "./history";
+import { nonNegative } from "./ui/number";
 export function Settings() {
   const settings = useQuery({
     queryKey: ["settings"],
@@ -92,7 +93,7 @@ function SettingsForm({ data }: { data: any }) {
             Margem de segurança entre atendimentos (min)
             <input
               type="number"
-              min="0"
+              {...nonNegative}
               max="240"
               value={form.settings.bufferMinutes}
               onChange={(e) =>

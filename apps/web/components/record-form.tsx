@@ -1,5 +1,5 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +23,7 @@ import { Dialog } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { AddressFields } from "./address-fields";
 import { SearchSelect, searchKey } from "./ui/search-select";
+import { DurationInput, nonNegative, blockSigns } from "./ui/number";
 const byName = (a: { name: string }, b: { name: string }) =>
   a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" });
 const errorLabels: Record<string, string> = {
@@ -229,6 +230,19 @@ function Editor({
     );
   }
   const watch = form.watch();
+  // Date and time are typed apart and joined into startsAt (São Paulo, UTC-3, no daylight saving).
+  const [when, setWhen] = useState(() => {
+    const local = record
+      ? new Date(new Date(record.startsAt).getTime() - 3 * 3600000)
+          .toISOString()
+          .slice(0, 16)
+      : today() + "T10:00";
+    return { date: local.slice(0, 10), time: local.slice(11, 16) };
+  });
+  useEffect(() => {
+    if (entity === "appointments" && when.date && when.time)
+      form.setValue("startsAt", `${when.date}T${when.time}:00-03:00`);
+  }, [entity, form, when]);
   const [eventName, setEventName] = useState("");
   // Same rule as the server: case, accents and spacing do not make a new name.
   const nameKey = (v: string) => searchKey(v).replace(/\s+/g, " ");
@@ -269,14 +283,10 @@ function Editor({
         aria-label={label}
         type={type}
         step={opts?.money ? "0.01" : key === "kmPerLiter" ? "0.001" : undefined}
+        {...(type === "number" ? nonNegative : {})}
         {...form.register(key, {
-          valueAsNumber: ["duration", "year", "annualKm"].includes(key),
-          setValueAs:
-            key === "actualDuration"
-              ? (v) => (v === "" || v === null ? null : Number(v))
-              : type === "date"
-                ? (v) => v || null
-                : undefined,
+          valueAsNumber: ["year", "annualKm"].includes(key),
+          setValueAs: type === "date" ? (v) => v || null : undefined,
         })}
         required={opts?.required}
       />
@@ -286,6 +296,20 @@ function Editor({
         {label}
         {opts?.money ? money(input) : input}
       </label>
+    );
+  }
+  function duration(key: string, label: string, nullable = false) {
+    return (
+      <DurationInput
+        key={key}
+        label={label}
+        value={watch[key]}
+        onChange={(m) =>
+          form.setValue(key, m === null && !nullable ? 0 : m, {
+            shouldValidate: true,
+          })
+        }
+      />
     );
   }
   function select(
@@ -378,7 +402,7 @@ function Editor({
             {field("name", "Nome do serviço", "text", { required: true })}
             {field("category", "Categoria", "text", { required: true })}
             {field("price", "Preço de referência", "number", { money: true })}
-            {field("duration", "Duração prevista (min)", "number")}
+            {duration("duration", "Duração prevista (horas:minutos)")}
           </div>
           <label>
             Descrição
@@ -397,25 +421,32 @@ function Editor({
           <div className="form-grid">
             {field("title", "Nome do atendimento", "text", { required: true })}
             <label>
-              Data e horário (São Paulo)
+              Data
               <input
-                type="datetime-local"
-                defaultValue={
-                  record
-                    ? new Date(
-                        new Date(record.startsAt).getTime() - 3 * 3600000,
-                      )
-                        .toISOString()
-                        .slice(0, 16)
-                    : today() + "T10:00"
-                }
-                onChange={(e) =>
-                  form.setValue("startsAt", e.target.value + ":00-03:00")
-                }
+                type="date"
+                aria-label="Data"
+                required
+                value={when.date}
+                onChange={(e) => setWhen({ ...when, date: e.target.value })}
               />
             </label>
-            {field("duration", "Duração prevista (min)", "number")}
-            {field("actualDuration", "Duração realizada (min)", "number")}
+            <label>
+              Horário
+              <input
+                type="time"
+                aria-label="Horário"
+                required
+                step={60}
+                value={when.time}
+                onChange={(e) => setWhen({ ...when, time: e.target.value })}
+              />
+            </label>
+            {duration("duration", "Duração prevista (horas:minutos)")}
+            {duration(
+              "actualDuration",
+              "Duração realizada (horas:minutos)",
+              true,
+            )}
             {select("status", "Situação", Object.entries(statusLabels))}
             {field("dueDate", "Vencimento do saldo", "date")}
           </div>
@@ -515,6 +546,7 @@ function Editor({
                 <input
                   type="number"
                   min="1"
+                  onKeyDown={blockSigns}
                   {...form.register(`items.${i}.quantity`, {
                     valueAsNumber: true,
                   })}
@@ -526,6 +558,7 @@ function Editor({
                   <input
                     type="number"
                     step="0.01"
+                    {...nonNegative}
                     {...form.register(`items.${i}.unitPrice`)}
                   />,
                 )}
@@ -609,6 +642,7 @@ function Editor({
                   <input
                     type="number"
                     step="0.01"
+                    {...nonNegative}
                     {...form.register(`allocations.${i}.amount`)}
                   />,
                 )}

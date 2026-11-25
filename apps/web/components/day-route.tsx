@@ -19,6 +19,7 @@ import {
 import { statusLabels } from "@gferraz/shared";
 import { api, brl } from "./api";
 import { Button } from "./ui/button";
+import { nonNegative } from "./ui/number";
 
 const zone = "America/Sao_Paulo";
 const noon = (d: string) => new Date(d + "T12:00:00-03:00");
@@ -505,7 +506,7 @@ function Leg({ leg, departBy }: { leg: any; departBy?: string | null }) {
                 required
                 type="number"
                 inputMode="numeric"
-                min="0"
+                {...nonNegative}
                 max="1440"
                 step="1"
                 value={minutes}
